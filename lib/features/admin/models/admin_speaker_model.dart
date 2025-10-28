@@ -4,7 +4,7 @@ class AdminSpeakerModel {
   final String id;
   final String nombre;
   final String institucion;
-  final String contacto;
+  final String emailCertificado;
   final String bio;
   final List<String> temas;
   final DateTime? createdAt;
@@ -14,7 +14,7 @@ class AdminSpeakerModel {
     required this.id,
     required this.nombre,
     required this.institucion,
-    required this.contacto,
+    required this.emailCertificado,
     required this.bio,
     required this.temas,
     this.createdAt,
@@ -34,7 +34,7 @@ class AdminSpeakerModel {
       id: doc.id,
       nombre: (d['nombre'] ?? '').toString(),
       institucion: (d['institucion'] ?? '').toString(),
-      contacto: (d['contacto'] ?? '').toString(),
+       emailCertificado: (d['emailCertificado'] ?? d['contacto'] ?? '').toString(),
       bio: (d['bio'] ?? '').toString(),
       temas: (d['temas'] as List? ?? []).map((e) => e.toString()).toList(),
       createdAt: _dt(d['createdAt']),
@@ -45,7 +45,8 @@ class AdminSpeakerModel {
   Map<String, dynamic> toCreate() => {
         'nombre': nombre.trim(),
         'institucion': institucion.trim(),
-        'contacto': contacto.trim(),
+        'contacto': emailCertificado.trim(),
+        'emailCertificado': emailCertificado.trim(),
         'bio': bio.trim(),
         'temas': temas,
         'createdAt': FieldValue.serverTimestamp(),
@@ -56,7 +57,8 @@ class AdminSpeakerModel {
   Map<String, dynamic> toUpdate() => {
         'nombre': nombre.trim(),
         'institucion': institucion.trim(),
-        'contacto': contacto.trim(),
+         'contacto': emailCertificado.trim(),
+        'emailCertificado': emailCertificado.trim(),
         'bio': bio.trim(),
         'temas': temas,
         'updatedAt': FieldValue.serverTimestamp(),

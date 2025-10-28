@@ -18,7 +18,7 @@ class _SpeakerFormDialogState extends State<SpeakerFormDialog> {
   final _form = GlobalKey<FormState>();
   final _nombre = TextEditingController();
   final _institucion = TextEditingController();
-  final _contacto = TextEditingController();
+  final _email = TextEditingController();
   final _bio = TextEditingController();
   final _temas = TextEditingController();
 
@@ -31,7 +31,7 @@ class _SpeakerFormDialogState extends State<SpeakerFormDialog> {
     if (s != null) {
       _nombre.text = s.nombre;
       _institucion.text = s.institucion;
-      _contacto.text = s.contacto;
+       _email.text = s.emailCertificado;
       _bio.text = s.bio;
       _temas.text = s.temas.join(', ');
     }
@@ -41,7 +41,7 @@ class _SpeakerFormDialogState extends State<SpeakerFormDialog> {
   void dispose() {
     _nombre.dispose();
     _institucion.dispose();
-    _contacto.dispose();
+    _email.dispose();
     _bio.dispose();
     _temas.dispose();
     super.dispose();
@@ -69,7 +69,7 @@ class _SpeakerFormDialogState extends State<SpeakerFormDialog> {
       id: widget.existing?.id ?? '',
       nombre: _nombre.text.trim(),
       institucion: _institucion.text.trim(),
-      contacto: _contacto.text.trim(),
+      emailCertificado: _email.text.trim(),
       bio: _bio.text.trim(),
       temas: temas,
       // Si editas, preserva createdAt; si es nuevo, el service pondrá serverTimestamp
@@ -159,7 +159,7 @@ class _SpeakerFormDialogState extends State<SpeakerFormDialog> {
               ),
               const SizedBox(height: 8),
               TextFormField(
-                controller: _contacto,
+                controller: _email,
                 decoration: const InputDecoration(
                     labelText: 'Contacto (email/teléfono, opcional)'),
               ),

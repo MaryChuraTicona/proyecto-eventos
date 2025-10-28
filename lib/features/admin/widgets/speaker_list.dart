@@ -19,7 +19,7 @@ class SpeakerList extends StatelessWidget {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        final items = snap.data ?? const [];
+        final items = snap.data ?? const <AdminSpeakerModel>[];
         if (items.isEmpty) return const Center(child: Text('Sin ponentes'));
 
         return ListView.separated(
@@ -36,7 +36,12 @@ class SpeakerList extends StatelessWidget {
                 s.nombre,
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
-              subtitle: Text(s.institucion.isEmpty ? 'Externo' : s.institucion),
+             subtitle: Text(
+                [
+                  if (s.institucion.isNotEmpty) s.institucion,
+                  s.emailCertificado,
+                ].where((value) => value.isNotEmpty).join(' • '),
+              ),
               trailing: PopupMenuButton<String>(
                 onSelected: (v) async {
                   if (v == 'edit') {

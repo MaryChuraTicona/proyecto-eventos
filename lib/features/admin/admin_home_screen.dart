@@ -29,7 +29,7 @@ class AdminHomeScreen extends StatefulWidget {
   State<AdminHomeScreen> createState() => _AdminHomeScreenState();
 }
 
-enum _Tab { dashboard, eventos, ponencias, ponentes, usuarios, reportes }
+enum _Tab { dashboard, eventos, ponentes, usuarios, reportes }
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   _Tab _tab = _Tab.dashboard;
@@ -39,8 +39,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   final _sesSvc   = AdminSessionService();
   final _spkSvc   = AdminSpeakerService();
 
-  String? _selectedEventGroup; // para filtrar Ponencias por grupo de eventos
-
+  
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -95,7 +94,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             destinations: const [
               NavigationRailDestination(icon: Icon(Icons.dashboard_outlined),  label: Text('Dashboard')),
               NavigationRailDestination(icon: Icon(Icons.event_rounded),       label: Text('Eventos')),
-              NavigationRailDestination(icon: Icon(Icons.schedule_rounded),    label: Text('Ponencias')),
               NavigationRailDestination(icon: Icon(Icons.record_voice_over),   label: Text('Ponentes')),
               NavigationRailDestination(icon: Icon(Icons.people_alt_rounded),  label: Text('Usuarios')),
               NavigationRailDestination(icon: Icon(Icons.bar_chart_rounded),   label: Text('Reportes')),
@@ -107,13 +105,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               duration: const Duration(milliseconds: 220),
               child: switch (_tab) {
                 _Tab.dashboard => _Dashboard(key: ValueKey(_tab), cs: cs),
-                _Tab.eventos   => _EventosTab(key: ValueKey(_tab), eventSvc: _eventSvc),
-                _Tab.ponencias => _PonenciasTab(
+                _Tab.eventos   => _EventosTab(
                   key: ValueKey(_tab),
                   eventSvc: _eventSvc,
                   sesSvc: _sesSvc,
-                  selectedEventGroup: _selectedEventGroup,
-                  onSelectEventGroup: (group) => setState(() => _selectedEventGroup = group),
+                  
                 ),
                 _Tab.ponentes  => _PonentesTab(key: ValueKey(_tab), spkSvc: _spkSvc),
                 _Tab.usuarios  => _UsuariosTab(key: ValueKey(_tab)),
@@ -728,8 +724,8 @@ class _FacultyMetrics extends StatelessWidget {
 
 class _EventosTab extends StatelessWidget {
   final AdminEventService eventSvc;
-  const _EventosTab({super.key, required this.eventSvc});
-
+  final AdminSessionService sesSvc;
+  const _EventosTab({super.key, required this.eventSvc, required this.sesSvc});
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -743,49 +739,27 @@ class _EventosTab extends StatelessWidget {
         Expanded(
           child: StreamBuilder<List<AdminEventModel>>(
             stream: eventSvc.streamAll(),
-            builder: (_, s) {
-              final items = s.data ?? const [];
-              if (s.hasError) return _empty('Error: ${s.error}');
-              if (items.isEmpty) return _empty('Sin eventos. Crea el primero.');
+            builder: (_, snapshot) {
+              if (snapshot.hasError) {
+                return _empty('Error: ${snapshot.error}');
+              }
+              final events = snapshot.data ?? const <AdminEventModel>[];
+              if (events.isEmpty) {
+                return _empty('Sin eventos. Crea el primero.');
+              }
+
               return ListView.separated(
-                padding: const EdgeInsets.all(16),
-                itemBuilder: (_, i) {
-                  final e = items[i];
-                  return Card(
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      side: BorderSide(color: cs.outlineVariant),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: ListTile(
-                      title: Text(e.nombre, style: const TextStyle(fontWeight: FontWeight.w700)),
-                      subtitle: Text('${e.tipo} • ${e.lugarGeneral} • ${e.estado.toUpperCase()}'),
-                      trailing: Wrap(
-                        spacing: 8,
-                        children: [
-                          IconButton(
-                            tooltip: 'Editar',
-                            onPressed: () => showDialog(
-                              context: context,
-                              builder: (_) => EventFormDialog(existing: e),
-                            ),
-                            icon: const Icon(Icons.edit_outlined),
-                          ),
-                          IconButton(
-                            tooltip: 'Eliminar',
-                            onPressed: () async {
-                              await eventSvc.delete(e.id);
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Evento eliminado')));
-                            },
-                            icon: const Icon(Icons.delete_outline),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemCount: items.length,
+               padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                itemBuilder: (_, index) => _EventCard(
+                  event: events[index],
+                  cs: cs,
+                  eventSvc: eventSvc,
+                  sesSvc: sesSvc,
+                ),
+                separatorBuilder: (_, __) => const SizedBox(height: 20),
+                itemCount: events.length,
+
+
               );
             },
           ),
@@ -797,410 +771,615 @@ class _EventosTab extends StatelessWidget {
 
 /* ---------------- PONENCIAS ---------------- */
 
-class _PonenciasTab extends StatelessWidget {
+class _EventCard extends StatelessWidget {
+  final AdminEventModel event;
+  final ColorScheme cs;
   final AdminEventService eventSvc;
   final AdminSessionService sesSvc;
-  final String? selectedEventGroup;
-  final ValueChanged<String?> onSelectEventGroup;
 
-  const _PonenciasTab({
-    super.key,
+  const _EventCard({
+    required this.event,
+    required this.cs,
     required this.eventSvc,
     required this.sesSvc,
-    required this.selectedEventGroup,
-    required this.onSelectEventGroup,
+    
   });
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+     final status = event.estado.toLowerCase();
+    final (Color statusBg, Color statusFg) = switch (status) {
+      'activo' => (cs.primaryContainer.withOpacity(0.25), cs.onPrimaryContainer),
+      'borrador' => (cs.tertiaryContainer.withOpacity(0.3), cs.onTertiaryContainer),
+      'finalizado' => (cs.surfaceVariant, cs.onSurfaceVariant),
+      _ => (cs.surfaceVariant, cs.onSurfaceVariant),
+    };
 
-    return Column(
-      children: [
-        _Toolbar(
-          title: 'Ponencias',
-          actionBuilder: (ctx) => StreamBuilder<List<AdminEventModel>>(
-            stream: eventSvc.streamAll(),
-            builder: (ctx, s) {
-              final allEvents = s.data ?? const [];
-              
-              // Agrupar eventos por nombre base (sin años ni ediciones)
-              final eventGroups = <String, List<AdminEventModel>>{};
-              for (final event in allEvents) {
-                // Extraer el nombre base eliminando años, números y palabras comunes
-                final groupName = _extractBaseName(event.nombre);
-                eventGroups.putIfAbsent(groupName, () => []).add(event);
-              }
-              
-              // Obtener lista de grupos ordenada (case-insensitive)
-              final groups = eventGroups.keys.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-              
-              // Validar que el grupo seleccionado existe en la lista
-              // Si no existe, buscar uno que coincida case-insensitive o establecer a null
-              String? validatedSelection = selectedEventGroup;
-              if (selectedEventGroup != null && !groups.contains(selectedEventGroup)) {
-                // Buscar coincidencia case-insensitive
-                validatedSelection = groups.firstWhere(
-                  (g) => g.toLowerCase() == selectedEventGroup!.toLowerCase(),
-                  orElse: () => '',
-                );
-                if (validatedSelection.isEmpty) {
-                  validatedSelection = null;
-                }
-                // Si encontramos uno diferente, actualizamos el estado
-                if (validatedSelection != selectedEventGroup) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    onSelectEventGroup(validatedSelection);
-                  });
-                }
-              }
-              
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 320,
-                    child: DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      value: validatedSelection,
-                      items: groups.map((groupName) {
-                        final eventsInGroup = eventGroups[groupName]!;
-                        final eventCount = eventsInGroup.length;
-                        final activeCount = eventsInGroup.where((e) => e.estado == 'activo').length;
-                        
-                        return DropdownMenuItem(
-                          value: groupName,
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  groupName,
-                                  style: const TextStyle(fontWeight: FontWeight.w600),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: cs.primaryContainer,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  eventCount == 1 
-                                    ? '1 evento' 
-                                    : '$eventCount eventos',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: cs.onPrimaryContainer,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: onSelectEventGroup,
-                      decoration: const InputDecoration(
-                        labelText: 'Grupo de Eventos',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                        prefixIcon: Icon(Icons.folder_outlined),
+    final gradient = LinearGradient(
+      colors: [
+        cs.primary.withOpacity(0.95),
+        cs.primaryContainer.withOpacity(0.85),
+      ],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
+    
+ return Card(
+      elevation: 1.5,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(gradient: gradient),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        event.nombre,
+                        style: TextStyle(
+                          color: cs.onPrimary,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          height: 1.1,
+                        ),
+
                       ),
-                      hint: const Text('Selecciona un grupo de eventos'),
+                     const SizedBox(height: 6),
+                      Text(
+                        event.tipo,
+                        style: TextStyle(
+                          color: cs.onPrimary.withOpacity(0.85),
+                          fontSize: 13,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: statusBg,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Text(
+                    event.estado.toUpperCase(),
+                    style: TextStyle(
+                      color: statusFg,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: validatedSelection == null
-                        ? null
-                        : () => showDialog(
-                              context: context,
-                              builder: (_) => const SessionFormDialog(),
-                            ),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Nueva ponencia'),
+                   ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (event.descripcion.trim().isNotEmpty) ...[
+                  Text(
+                    event.descripcion,
+                    style: TextStyle(
+                      color: cs.onSurface.withOpacity(0.85),
+                      fontSize: 14,
+                      height: 1.45,
+                    ),
+
+
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              
+ Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    _InfoPill(
+                      icon: Icons.calendar_today_outlined,
+                      label: _formatDateRange(event),
+                      cs: cs,
+                    ),
+                    _InfoPill(
+                      icon: Icons.public_outlined,
+                      label: event.modalidadGeneral,
+                      cs: cs,
+                    ),
+                    _InfoPill(
+                      icon: Icons.location_on_outlined,
+                      label: event.lugarGeneral,
+              
+                      cs: cs,
+                  ),
+                    _InfoPill(
+                      icon: Icons.people_alt_outlined,
+                      label: 'Aforo ${event.aforoGeneral}',
+                      cs: cs,
+                    ),
+                    if (event.requiereInscripcionPorSesion)
+                      _InfoPill(
+                        icon: Icons.fact_check_outlined,
+                        label: 'Inscripción por ponencia',
+                        cs: cs,
+                      ),
+                  ],
+                ),
+if (event.dias.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: event.dias
+                        .map((d) => _DayChip(label: _formatDayLabel(d), cs: cs))
+                        .toList(),
                   ),
                 ],
-              );
-            },
+              ],
+            ),
           ),
-        ),
-        const Divider(height: 1),
-        Expanded(
-          child: selectedEventGroup == null
-              ? _empty('Selecciona un grupo de eventos para ver sus ponencias.')
-              : StreamBuilder<List<AdminEventModel>>(
-                  stream: eventSvc.streamAll(),
-                  builder: (ctx, eventSnapshot) {
-                    if (eventSnapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    
-                    final allEvents = eventSnapshot.data ?? const [];
-                    AppLogger.debug('📊 Total eventos: ${allEvents.length}');
-                    AppLogger.debug('🔍 Grupo seleccionado: $selectedEventGroup');
-                    
-                    // Filtrar eventos del grupo seleccionado usando nombre base (case-insensitive)
-                    final eventsInGroup = allEvents
-                        .where((e) {
-                          final baseName = _extractBaseName(e.nombre);
-                          final match = baseName.toLowerCase() == selectedEventGroup?.toLowerCase();
-                          AppLogger.debug('   Evento "${e.nombre}" -> base: "$baseName" (match: $match)');
-                          return match;
-                        })
-                        .toList();
-                    
-                    AppLogger.info('✅ Eventos en grupo "$selectedEventGroup": ${eventsInGroup.length}');
-                    if (eventsInGroup.isNotEmpty) {
-                      for (final e in eventsInGroup) {
-                        AppLogger.debug('   - ${e.nombre} (ID: ${e.id})');
-                      }
-                    }
-                    
-                    if (eventsInGroup.isEmpty) {
-                      return _empty('No se encontraron eventos en este grupo.');
-                    }
-                    
-                    // Obtener IDs de todos los eventos del grupo
-                    final eventIds = eventsInGroup.map((e) => e.id).toList();
-                    AppLogger.info('🎯 IDs de eventos a consultar: $eventIds');
-                    
-                    // Combinar ponencias de todos los eventos del grupo
-                    return _GroupSessionsView(
-                      sesSvc: sesSvc,
-                      eventIds: eventIds,
-                      groupName: selectedEventGroup!,
-                      cs: cs,
-                    );
-                  },
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              children: [
+                FilledButton.icon(
+                  onPressed: () => showDialog(
+                    context: context,
+                    builder: (_) => SessionFormDialog(
+                      preselectedEventId: event.id,
+                      preselectedEventName: event.nombre,
+                    ),
+                  ),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Nueva ponencia'),
                 ),
-        ),
-      ],
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: () => showDialog(
+                    context: context,
+                    builder: (_) => EventFormDialog(existing: event),
+                  ),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Editar evento'),
+                ),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'Eliminar evento',
+                  onPressed: () => _confirmDelete(context),
+                  icon: const Icon(Icons.delete_outline_rounded),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            child: StreamBuilder<List<AdminSessionModel>>(
+              stream: sesSvc.streamByEvent(event.id),
+              builder: (context, sessionSnap) {
+                if (sessionSnap.connectionState == ConnectionState.waiting) {
+                  return const Center(child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: CircularProgressIndicator(),
+                  ));
+                }
+                if (sessionSnap.hasError) {
+                  return _SectionPlaceholder(
+                    icon: Icons.warning_amber_rounded,
+                    message: 'Error al cargar las ponencias: ${sessionSnap.error}',
+                    cs: cs,
+                  );
+                }
+                final sessions = sessionSnap.data ?? const <AdminSessionModel>[];
+                if (sessions.isEmpty) {
+                  return _SectionPlaceholder(
+                    icon: Icons.lightbulb_outline,
+                    message: 'Sin ponencias todavía. ¡Agrega la primera!',
+                    cs: cs,
+                  );
+                }
+
+                final sortedSessions = [...sessions]
+                  ..sort((a, b) => a.horaInicio.compareTo(b.horaInicio));
+
+                return Column(
+                  children: [
+                    for (final session in sortedSessions)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _SessionTile(
+                          session: session,
+                          cs: cs,
+                          sesSvc: sesSvc,
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Eliminar evento'),
+        content: Text('Esta acción eliminará "${event.nombre}" y sus datos asociados. ¿Continuar?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await eventSvc.delete(event.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Evento "${event.nombre}" eliminado')),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('No se pudo eliminar: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  static String _formatDateRange(AdminEventModel event) {
+    String fmt(DateTime? date) {
+      if (date == null) return 'Por definir';
+      const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+      final day = date.day.toString().padLeft(2, '0');
+      final month = months[date.month - 1];
+      return '$day $month ${date.year}';
+    }
+
+    final start = event.fechaInicio;
+    final end = event.fechaFin ?? event.fechaInicio;
+
+    if (start == null && end == null) {
+      return 'Fechas por definir';
+    }
+    if (start == null) {
+      return 'Hasta ${fmt(end)}';
+    }
+    if (end == null || start.isAtSameMomentAs(end)) {
+      return fmt(start);
+    }
+    return '${fmt(start)} – ${fmt(end)}';
+  }
+
+  static String _formatDayLabel(String raw) {
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) {
+      return raw;
+    }
+    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    final day = parsed.day.toString().padLeft(2, '0');
+    final month = months[parsed.month - 1];
+    return '$day $month';
+        
+    
+  }
+}
+
+class _InfoPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final ColorScheme cs;
+
+  const _InfoPill({required this.icon, required this.label, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.surfaceVariant.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.6)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: cs.primary),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: cs.onSurface.withOpacity(0.85),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-/// Widget que muestra todas las ponencias de múltiples eventos agrupados
-class _GroupSessionsView extends StatelessWidget {
-  final AdminSessionService sesSvc;
-  final List<String> eventIds;
-  final String groupName;
+class _DayChip extends StatelessWidget {
+  final String label;
   final ColorScheme cs;
 
-  const _GroupSessionsView({
-    required this.sesSvc,
-    required this.eventIds,
-    required this.groupName,
+  const _DayChip({required this.label, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: cs.primaryContainer.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.event_available_rounded, size: 14, color: cs.primary),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: cs.onPrimaryContainer,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionPlaceholder extends StatelessWidget {
+  final IconData icon;
+  final String message;
+  final ColorScheme cs;
+
+  const _SectionPlaceholder({
+    required this.icon,
+    required this.message,
     required this.cs,
   });
 
   @override
   Widget build(BuildContext context) {
-    AppLogger.debug('🎬 _GroupSessionsView build con ${eventIds.length} eventos');
-    
-    // Si no hay eventos, mostrar mensaje
-    if (eventIds.isEmpty) {
-      return _empty('No hay eventos en este grupo.');
-    }
-    
-    // Si solo hay un evento, usar stream directo (más simple)
-    if (eventIds.length == 1) {
-      return StreamBuilder<List<AdminSessionModel>>(
-        stream: sesSvc.streamByEvent(eventIds.first),
-        builder: (_, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          
-          if (snapshot.hasError) {
-            AppLogger.error('❌ Error en stream de sesiones', snapshot.error, StackTrace.current);
-            return _empty('Error: ${snapshot.error}');
-          }
-          
-          final allSessions = snapshot.data ?? [];
-          AppLogger.debug('📋 Sesiones recibidas: ${allSessions.length}');
-          
-          if (allSessions.isEmpty) {
-            return _empty('Sin ponencias para "$groupName".\nAgrega la primera ponencia.');
-          }
-          
-          // Ordenar por fecha/hora de inicio
-          allSessions.sort((a, b) => a.horaInicio.compareTo(b.horaInicio));
-          
-          return _buildSessionList(context, allSessions);
-        },
-      );
-    }
-    
-    // Para múltiples eventos, combinar streams
-    final streams = eventIds.map((id) => sesSvc.streamByEvent(id)).toList();
-    
-    return StreamBuilder<List<List<AdminSessionModel>>>(
-      stream: _combineStreams(streams),
-      builder: (ctx, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        
-        if (snapshot.hasError) {
-          AppLogger.error('❌ Error combinando streams', snapshot.error, StackTrace.current);
-          return _empty('Error: ${snapshot.error}');
-        }
-        
-        // Combinar todas las ponencias
-        final allSessions = <AdminSessionModel>[];
-        for (final sessionList in snapshot.data ?? []) {
-          allSessions.addAll(sessionList);
-        }
-        
-        AppLogger.debug('📋 Total sesiones combinadas: ${allSessions.length}');
-        
-        // Ordenar por fecha/hora de inicio
-        allSessions.sort((a, b) => a.horaInicio.compareTo(b.horaInicio));
-        
-        if (allSessions.isEmpty) {
-          return _empty('Sin ponencias para "$groupName".\nAgrega la primera ponencia.');
-        }
-        
-        return _buildSessionList(ctx, allSessions);
-      },
+   
+
+return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+      decoration: BoxDecoration(
+        color: cs.surfaceVariant.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.6)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: cs.primary, size: 28),
+          const SizedBox(height: 10),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+
     );
   }
-  
-  Widget _buildSessionList(BuildContext context, List<AdminSessionModel> allSessions) {
-        
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemBuilder: (_, i) {
-            final p = allSessions[i];
-            final rango = '${_fmt(p.horaInicio)} – ${_fmt(p.horaFin)}';
-            
-            return Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                side: BorderSide(color: cs.outlineVariant),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: cs.primaryContainer,
-                  child: Icon(Icons.school, color: cs.onPrimaryContainer),
+  }
+
+class _SessionTile extends StatelessWidget {
+  final AdminSessionModel session;
+  final ColorScheme cs;
+  final AdminSessionService sesSvc;
+
+  const _SessionTile({
+    required this.session,
+    required this.cs,
+    required this.sesSvc,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final range = '${_fmt(session.horaInicio)} – ${_fmt(session.horaFin)}';
+    final modalityColor = session.modalidad.toLowerCase() == 'virtual'
+        ? cs.tertiary
+        : cs.primary;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceVariant.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.7)),
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: modalityColor.withOpacity(0.18),
+            child: Icon(
+              session.modalidad.toLowerCase() == 'virtual'
+                  ? Icons.wifi_rounded
+                  : Icons.meeting_room_outlined,
+              color: modalityColor,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  session.titulo,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: cs.onSurface,
+
                 ),
-                title: Text(
-                  p.titulo,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                
                 ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+const SizedBox(height: 4),
+                Text(
+                  'Ponente: ${session.ponenteNombre}',
+                  style: TextStyle(
+                    color: cs.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
+                  ),
+  ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
                   children: [
-                    const SizedBox(height: 4),
-                    Text('👤 ${p.ponenteNombre}'),
-                    Text('📍 ${p.modalidad} • ${p.dia} • $rango'),
-                  ],
-                ),
-                isThreeLine: true,
-                trailing: Wrap(
-                  spacing: 8,
-                  children: [
-                    IconButton(
-                      tooltip: 'Editar',
-                      onPressed: () => showDialog(
-                        context: context,
-                        builder: (_) => SessionFormDialog(existing: p),
+                    
+                    _MiniTag(
+                      icon: Icons.schedule_rounded,
+                      label: range,
+                      cs: cs,
+                    ),
+                    _MiniTag(
+                      icon: Icons.event_note_outlined,
+                      label: session.dia,
+                      cs: cs,
+                    ),
+                    if (session.modalidad.toLowerCase() == 'virtual' && (session.link ?? '').isNotEmpty)
+                      _MiniTag(
+                        icon: Icons.link,
+                        label: 'Enlace disponible',
+                        cs: cs,
+                      )
+                    else if ((session.sala ?? '').isNotEmpty)
+                      _MiniTag(
+                        icon: Icons.place_outlined,
+                        label: session.sala!,
+                        cs: cs,
                       ),
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                    IconButton(
-                      tooltip: 'Eliminar',
-                      onPressed: () async {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (_) => AlertDialog(
-                            title: const Text('Confirmar eliminación'),
-                            content: Text('¿Eliminar la ponencia "${p.titulo}"?'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('Cancelar'),
-                              ),
-                              FilledButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                child: const Text('Eliminar'),
-                              ),
-                            ],
-                          ),
-                        );
-                        
-                        if (confirm == true) {
-                          await sesSvc.delete(p.eventoId, p.id);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('✅ Ponencia eliminada')),
-                            );
-                          }
-                        }
-                      },
-                      icon: const Icon(Icons.delete_outline),
-                    ),
                   ],
                 ),
+                  
+if (session.tags.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: session.tags
+                        .map((tag) => Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: cs.primary.withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(12)
+
+
+
+                              ),
+                              
+child: Text(
+                                '#$tag',
+                                style: TextStyle(
+                                  color: cs.primary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+
+                              ),
+                           ))
+                        .toList(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Column(
+            children: [
+              IconButton(
+                tooltip: 'Editar ponencia',
+                onPressed: () => showDialog(
+                  context: context,
+                  builder: (_) => SessionFormDialog(existing: session),
+                ),
+                icon: const Icon(Icons.edit_outlined),
+              ), 
+               IconButton(
+                tooltip: 'Eliminar ponencia',
+                onPressed: () => _deleteSession(context),
+                icon: const Icon(Icons.delete_outline),
               ),
-            );
-          },
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemCount: allSessions.length,
-        );
+            ],
+          ),
+        ],
+      ),
+    );
+
   }
   
-  // Combinar múltiples streams en uno solo
-  // Esta implementación escucha cambios en cualquier stream y re-emite todos los datos
-  Stream<List<List<AdminSessionModel>>> _combineStreams(
-    List<Stream<List<AdminSessionModel>>> streams,
-  ) async* {
-    if (streams.isEmpty) {
-      yield [];
-      return;
-    }
-    
-    // Mantener el último valor de cada stream
-    final List<List<AdminSessionModel>?> latestValues = List.filled(streams.length, null);
-    final controller = StreamController<List<List<AdminSessionModel>>>();
-    final subscriptions = <StreamSubscription>[];
-    
-    // Función para emitir el estado combinado cuando todos los streams han emitido al menos una vez
-    void emitCombined() {
-      if (latestValues.every((v) => v != null)) {
-        controller.add(latestValues.cast<List<AdminSessionModel>>().toList());
+ 
+Future<void> _deleteSession(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Eliminar ponencia'),
+        content: Text('¿Seguro que deseas eliminar "${session.titulo}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await sesSvc.delete(session.eventoId, session.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Ponencia eliminada')),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('No se pudo eliminar la ponencia: $e')),
+          );
+        }
+
       }
-    }
     
-    // Escuchar cada stream
-    for (int i = 0; i < streams.length; i++) {
-      final subscription = streams[i].listen(
-        (data) {
-          latestValues[i] = data;
-          emitCombined();
-        },
-        onError: (error) {
-          AppLogger.error('Error en stream $i', error, StackTrace.current);
-          controller.addError(error);
-        },
-      );
-      subscriptions.add(subscription);
-    }
-    
-    // Emitir los valores del controller
-    try {
-      await for (final value in controller.stream) {
-        yield value;
-      }
-    } finally {
-      // Cancelar todas las suscripciones al terminar
-      for (final sub in subscriptions) {
-        sub.cancel();
-      }
-      controller.close();
     }
   }
 
@@ -1212,57 +1391,41 @@ class _GroupSessionsView extends StatelessWidget {
   }
 }
 
-/// Extrae el nombre base de un evento eliminando años, ediciones y números
-/// 
-/// Ejemplos:
-/// - "CATEC 2025" → "CATEC"
-/// - "CATEC 2024" → "CATEC"
-/// - "Microsoft 2023" → "Microsoft"
-/// - "Software Libre - Edición 5" → "Software Libre"
-String _extractBaseName(String eventName) {
-  // Si el nombre es muy corto (menos de 3 caracteres), no procesarlo
-  if (eventName.trim().length < 3) {
-    return eventName.trim();
+class _MiniTag extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final ColorScheme cs;
+
+  const _MiniTag({required this.icon, required this.label, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: cs.surfaceVariant.withOpacity(0.45),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: cs.primary),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: cs.onSurfaceVariant,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+
   }
   
-  String cleaned = eventName;
-  
-  // Eliminar años (2020-2099) solo si no es todo el nombre
-  final withoutYear = cleaned.replaceAll(RegExp(r'\b20\d{2}\b'), '').trim();
-  if (withoutYear.isNotEmpty && withoutYear.length >= 2) {
-    cleaned = withoutYear;
-  }
-  
-  // Eliminar palabras comunes de edición solo si quedan palabras después
-  final withoutEdition = cleaned.replaceAll(
-    RegExp(r'\b(Edición|Edition|Ed\.|Vol\.|Volumen)\s*\d*\b', caseSensitive: false), 
-    ''
-  ).trim();
-  if (withoutEdition.isNotEmpty && withoutEdition.length >= 2) {
-    cleaned = withoutEdition;
-  }
-  
-  // Eliminar números romanos al final (I, II, III, IV, V, etc.) solo si quedan palabras
-  final withoutRoman = cleaned.replaceAll(RegExp(r'\b[IVX]+\s*$'), '').trim();
-  if (withoutRoman.isNotEmpty && withoutRoman.length >= 2) {
-    cleaned = withoutRoman;
-  }
-  
-  // Eliminar números simples al final (1, 2, 3, etc.) solo si quedan palabras
-  final withoutNumbers = cleaned.replaceAll(RegExp(r'\s+\d+\s*$'), '').trim();
-  if (withoutNumbers.isNotEmpty && withoutNumbers.length >= 2) {
-    cleaned = withoutNumbers;
-  }
-  
-  // Eliminar guiones, puntos y espacios extra al final
-  cleaned = cleaned.replaceAll(RegExp(r'[\s\-\.]+$'), '').trim();
-  
-  // Si quedó vacío o muy corto después de todo el procesamiento, devolver el nombre original
-  if (cleaned.isEmpty || cleaned.length < 2) {
-    return eventName.trim();
-  }
-  
-  return cleaned;
+
 }
 
 /* ---------------- PONENTES ---------------- */
@@ -1307,8 +1470,11 @@ class _PonentesTab extends StatelessWidget {
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (p.institucion.isNotEmpty || p.contacto.isNotEmpty)
-                            Text([p.institucion, p.contacto].where((e) => e.isNotEmpty).join(' • ')),
+                         Text([
+                            if (p.institucion.isNotEmpty) p.institucion,
+                            p.emailCertificado,
+                          ].where((e) => e.isNotEmpty).join(' • ')),
+
                           const SizedBox(height: 4),
                           Row(
                             children: [

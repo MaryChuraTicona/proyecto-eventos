@@ -121,10 +121,11 @@ class AuthController {
   Future<UserCredential> registerWithEmailPassword({
     required String email,
     required String password,
+     required Map<String, dynamic> profileData,
   }) async {
     try {
       AppLogger.info('Registrando nuevo usuario: $email');
-      
+
       if (isInstitutionalEmail(email)) {
         throw ErrorMessages.institutionalOnly;
       }
@@ -133,10 +134,40 @@ class AuthController {
         email: email.trim().toLowerCase(),
         password: password,
       );
+      final nombres = (profileData['nombres'] ?? '').toString().trim();
+      final apellidos = (profileData['apellidos'] ?? '').toString().trim();
+      final telefono = (profileData['telefono'] ?? '').toString().trim();
+      final documento = (profileData['documento'] ?? '').toString().trim();
+      final displayName = [nombres, apellidos]
+          .where((part) => part.isNotEmpty)
+          .join(' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+
+      if (displayName.isNotEmpty) {
+        await credential.user!.updateDisplayName(displayName);
+      }
+
 
       // Crear documento en Firestore
       await ensureUserDocument(credential.user!);
       
+      final profileDoc = <String, dynamic>{
+        if (displayName.isNotEmpty) 'displayName': displayName,
+        'nombres': nombres,
+        'apellidos': apellidos,
+        if (telefono.isNotEmpty) 'telefono': telefono,
+        if (documento.isNotEmpty) 'documento': documento,
+        'profileCompleted': true,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      if (profileDoc.isNotEmpty) {
+        await _firestore
+            .collection(FirestoreCollections.users)
+            .doc(credential.user!.uid)
+            .set(profileDoc, SetOptions(merge: true));
+      }
       AppLogger.success('Registro exitoso: $email');
       return credential;
     } on FirebaseAuthException catch (e) {
