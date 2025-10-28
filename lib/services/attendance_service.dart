@@ -11,7 +11,8 @@ class AttendanceService {
     return sessionId == null ? '${eventId}_$uid' : '${eventId}_${sessionId}_$uid';
   }
 
-  Future<void> mark(String eventId, String uid, [String? sessionId]) async {
+  Future<void> mark(String eventId, String uid, [String? sessionId, Map<String, 
+  dynamic>? extra]) async {
     final id = _docId(eventId, uid, sessionId);
     await _db.collection(_collectionName).doc(id).set({
       'id': id,
@@ -20,6 +21,7 @@ class AttendanceService {
       if (sessionId != null) 'sessionId': sessionId,
       'markedAt': FieldValue.serverTimestamp(),
       'present': true,
+       if (extra != null) ...extra,
     }, SetOptions(merge: true));
   }
 
@@ -75,6 +77,8 @@ class AttendanceService {
     required DateTime end,
     Duration toleranceBefore = const Duration(minutes: 15),
     Duration toleranceAfter = const Duration(minutes: 30),
+    Map<String, dynamic>? extra,
+ 
   }) async {
     final now = DateTime.now();
     final windowStart = start.subtract(toleranceBefore);
@@ -84,7 +88,7 @@ class AttendanceService {
       return false;
     }
 
-    await mark(eventId, uid, sessionId);
+    await mark(eventId, uid, sessionId, extra);
     return true;
   }
 }

@@ -26,13 +26,25 @@ class RegistrationService {
     return sessionId == null ? '${eventId}_$uid' : '${eventId}_${sessionId}_$uid';
   }
 
-  Future<void> register(String uid, String eventId, [String? sessionId]) async {
+   Future<void> register(
+    String uid,
+    String eventId, [
+    String? sessionId,
+    Map<String, dynamic>? extra,
+  ]) async {
     final id = _docId(eventId, uid, sessionId);
     await _db.collection(_collectionName).doc(id).set({
       'id': id,
       'eventId': eventId,
       'uid': uid,
       if (sessionId != null) 'sessionId': sessionId,
+if (sessionId == null) 'scope': 'event' else 'scope': 'session',
+      if (extra != null)
+        'answers': {
+          ...extra,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+
       'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
