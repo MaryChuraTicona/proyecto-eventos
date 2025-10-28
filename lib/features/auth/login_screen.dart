@@ -250,22 +250,36 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Container(
-            decoration: const BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage('assets/images/bg_login.jpg'),
-                fit: BoxFit.cover,
-                opacity: 0.32,
-              ),
-            ),
-          ),
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: _buildCard(context, cs),
-              ),
+          const _LoginBackground(),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth > 720;
+                final horizontalPadding = isWide ? 56.0 : 24.0;
+
+                return Align(
+                  alignment: isWide ? Alignment.center : Alignment.topCenter,
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(
+                      horizontalPadding,
+                      isWide ? 48 : 32,
+                      horizontalPadding,
+                      32,
+                    ),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: isWide ? 560 : 460),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildWelcomeHeader(cs),
+                          const SizedBox(height: 18),
+                          _buildCard(context, cs),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ],
@@ -274,166 +288,310 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildCard(BuildContext context, ColorScheme cs) {
-    return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: cs.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'ESCUELA PROFESIONAL DE INGENIERÍA DE SISTEMAS',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: cs.primary,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 14),
-            CircleAvatar(
-              radius: 40,
-              backgroundColor: cs.primary.withOpacity(.1),
-              child: Icon(Icons.school_rounded, color: cs.primary, size: 44),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Acceso para docentes, estudiantes y ponentes',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: cs.primary, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'EVENTOS EPIS – UPT',
-              style: TextStyle(
-                color: cs.onSurface,
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 16),
+    final borderRadius = BorderRadius.circular(28);
 
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: true, label: Text('Institucional')),
-                ButtonSegment(value: false, label: Text('Externo')),
-              ],
-              selected: {_modoInstitucional},
-              onSelectionChanged: (s) => setState(() => _modoInstitucional = s.first),
-            ),
-            const SizedBox(height: 16),
-
-            _GoogleButton(onPressed: _loading ? null : _googleSignIn),
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(child: Divider(color: cs.outlineVariant)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Text('o con correo', style: TextStyle(color: cs.onSurfaceVariant)),
-                ),
-                Expanded(child: Divider(color: cs.outlineVariant)),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  TextFormField(
-                    controller: _emailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(
-                      labelText: 'Correo electrónico',
-                      hintText: _modoInstitucional
-                          ? 'usuario@virtual.upt.pe'
-                          : 'correo@ejemplo.com',
-                      prefixIcon: const Icon(Icons.email_outlined),
-                    ),
-                    validator: (v) {
-                      final email = (v ?? '').trim();
-                      final re = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
-                      if (email.isEmpty) return 'Ingresa tu correo';
-                      if (!re.hasMatch(email)) return 'Correo inválido';
-                      if (_modoInstitucional && !_esInstitucional(email)) {
-                        return 'Debe ser @virtual.upt.pe';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _passCtrl,
-                    obscureText: _obscure,
-                    decoration: InputDecoration(
-                      labelText: 'Contraseña',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        tooltip: _obscure ? 'Mostrar' : 'Ocultar',
-                        icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
-                        onPressed: () => setState(() => _obscure = !_obscure),
-                      ),
-                    ),
-                    validator: (v) => (v ?? '').length < 6 ? 'Mínimo 6 caracteres' : null,
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      TextButton(
-                        onPressed: _loading ? null : _reset,
-                        child: const Text('¿Olvidaste tu contraseña?'),
-                      ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: _loading ? null : () => _showRegisterDialog(_emailCtrl.text.trim()),
-                        child: const Text('Crear cuenta'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _loading ? null : _loginEmail,
-                      child: _loading
-                          ? const SizedBox(
-                              width: 18, height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Iniciar sesión'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 18),
-            Divider(color: cs.outlineVariant),
-            const SizedBox(height: 8),
-
-            Text.rich(
-              TextSpan(
-                text: 'Soporte: ',
-                style: TextStyle(color: cs.onSurfaceVariant),
-                children: const [
-                  TextSpan(
-                    text: 'eventos-epis@upt.pe',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ],
-              ),
-              textAlign: TextAlign.center,
-            ),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: borderRadius,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            cs.primary.withOpacity(0.12),
+            cs.primary.withOpacity(0.04),
           ],
         ),
       ),
+      child: Container(
+        margin: const EdgeInsets.all(1.8),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.96),
+          borderRadius: borderRadius.subtract(const BorderRadius.all(Radius.circular(2))),
+          boxShadow: [
+            BoxShadow(
+              color: cs.primary.withOpacity(0.18),
+              blurRadius: 28,
+              offset: const Offset(0, 18),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: borderRadius.subtract(const BorderRadius.all(Radius.circular(2))),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(26, 30, 26, 22),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      cs.primary.withOpacity(0.95),
+                      cs.primary.withOpacity(0.78),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: 60,
+                      child: Image.asset(
+                        'assets/images/logo_horizontal.png',
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.event_available_rounded,
+                          color: cs.onPrimary,
+                          size: 60,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'EVENTOS EPIS – UPT',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: cs.onPrimary,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.4,
+                          ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Gestión integral de eventos académicos, talleres y ponencias.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: cs.onPrimary.withOpacity(0.86),
+                          ),
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 12,
+                      runSpacing: 10,
+                      children: const [
+                        _LoginPill(
+                          icon: Icons.dashboard_customize_rounded,
+                          label: 'Panel administrativo',
+                        ),
+                        _LoginPill(
+                          icon: Icons.qr_code_rounded,
+                          label: 'Control con códigos QR',
+                        ),
+                        _LoginPill(
+                          icon: Icons.auto_graph_rounded,
+                          label: 'Reportes y asistencia',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(26, 26, 26, 10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SegmentedButton<bool>(
+                      style: ButtonStyle(
+                        visualDensity: VisualDensity.standard,
+                        backgroundColor: MaterialStateProperty.resolveWith(
+                          (states) => states.contains(MaterialState.selected)
+                              ? cs.primary.withOpacity(0.12)
+                              : Colors.transparent,
+                        ),
+                      ),
+                      segments: const [
+                        ButtonSegment(
+                          value: true,
+                          label: Text('Institucional'),
+                          icon: Icon(Icons.school_rounded),
+                        ),
+                        ButtonSegment(
+                          value: false,
+                          label: Text('Externo'),
+                          icon: Icon(Icons.badge_outlined),
+                        ),
+                      ],
+                      selected: {_modoInstitucional},
+                      onSelectionChanged: (s) => setState(() => _modoInstitucional = s.first),
+                    ),
+                    const SizedBox(height: 18),
+                    _GoogleButton(onPressed: _loading ? null : _googleSignIn),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(child: Divider(color: cs.outlineVariant)),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            'o continúa con correo',
+                            style: TextStyle(color: cs.onSurfaceVariant),
+                          ),
+                        ),
+                        Expanded(child: Divider(color: cs.outlineVariant)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Form(
+                      key: _formKey,
+                      child: Column(
+                        children: [
+                          TextFormField(
+                            controller: _emailCtrl,
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: InputDecoration(
+                              labelText: 'Correo electrónico',
+                              hintText: _modoInstitucional
+                                  ? 'usuario@virtual.upt.pe'
+                                  : 'correo@ejemplo.com',
+                              prefixIcon: const Icon(Icons.alternate_email_rounded),
+                            ),
+                            validator: (v) {
+                              final email = (v ?? '').trim();
+                              final re = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
+                              if (email.isEmpty) return 'Ingresa tu correo';
+                              if (!re.hasMatch(email)) return 'Correo inválido';
+                              if (_modoInstitucional && !_esInstitucional(email)) {
+                                return 'Debe ser @virtual.upt.pe';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _passCtrl,
+                            obscureText: _obscure,
+                            decoration: InputDecoration(
+                              labelText: 'Contraseña',
+                              prefixIcon: const Icon(Icons.lock_outline),
+                              suffixIcon: IconButton(
+                                tooltip: _obscure ? 'Mostrar' : 'Ocultar',
+                                icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                                onPressed: () => setState(() => _obscure = !_obscure),
+                              ),
+                            ),
+                            validator: (v) => (v ?? '').length < 6 ? 'Mínimo 6 caracteres' : null,
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              TextButton(
+                                onPressed: _loading ? null : _reset,
+                                child: const Text('¿Olvidaste tu contraseña?'),
+                              ),
+                              const Spacer(),
+                              TextButton(
+                                onPressed: _loading ? null : () => _showRegisterDialog(_emailCtrl.text.trim()),
+                                child: const Text('Crear cuenta'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              onPressed: _loading ? null : _loginEmail,
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 220),
+                                transitionBuilder: (child, animation) =>
+                                    FadeTransition(opacity: animation, child: child),
+                                child: _loading
+                                    ? const SizedBox(
+                                        key: ValueKey('loader'),
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2.2),
+                                      )
+                                    : const Text(
+                                        'Iniciar sesión',
+                                        key: ValueKey('label'),
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(26, 18, 26, 26),
+                decoration: BoxDecoration(
+                  color: cs.primary.withOpacity(0.1),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Soporte',
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            color: cs.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    SelectableText(
+                      'eventos-epis@upt.pe',
+                      textAlign: TextAlign.start,
+                      style: TextStyle(
+                        color: cs.onSurface,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Solo los correos @virtual.upt.pe pueden acceder con Google. '
+                      'Los participantes externos deben registrarse una sola vez.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWelcomeHeader(ColorScheme cs) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          decoration: BoxDecoration(
+            color: cs.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Text(
+            'Plataforma oficial de la Escuela Profesional de Ingeniería de Sistemas',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: cs.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          'Participa, organiza y gestiona los eventos académicos de la EPIS',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: cs.onSurface,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 
@@ -526,6 +684,69 @@ class _GoogleButton extends StatelessWidget {
           foregroundColor: cs.onSurface,
           textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
+      ),
+    );
+  }
+}
+
+class _LoginBackground extends StatelessWidget {
+  const _LoginBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage('assets/images/bg_login.jpg'),
+          fit: BoxFit.cover,
+          opacity: 0.28,
+        ),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black.withOpacity(0.15),
+              Colors.black.withOpacity(0.3),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoginPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _LoginPill({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.onPrimary.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cs.onPrimary.withOpacity(0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: cs.onPrimary),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: cs.onPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
