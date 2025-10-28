@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Verificar Firebase - Eventos EPIS</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1976d2;
+            border-bottom: 3px solid #1976d2;
+            padding-bottom: 10px;
+        }
+        button {
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #1565c0;
+        }
+        #log {
+            background: #263238;
+            color: #00e676;
+            padding: 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .success {
+            color: #00e676;
+        }
+        .error {
+            color: #ff5252;
+        }
+        .info {
+            color: #40c4ff;
+        }
+        .warning {
+            color: #ffab00;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .status.success {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+        .status.error {
+            background: #ffcdd2;
+            color: #c62828;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔥 Verificador de Firebase - Eventos EPIS</h1>
+        
+        <div id="status" class="status" style="display:none;"></div>
+        
+        <h3>1. Login con Email</h3>
+        <input type="email" id="email" placeholder="tu@email.com" value="joarteaga@upt.pe">
+        <input type="password" id="password" placeholder="contraseña">
+        <button onclick="testLogin()">🔑 Login</button>
+        <button onclick="testCreateUser()">➕ Crear Usuario Test</button>
+        
+        <h3>2. Verificar Permisos Firestore</h3>
+        <button onclick="testFirestoreRead()">📖 Test Read</button>
+        <button onclick="testFirestoreWrite()">✍️ Test Write</button>
+        <button onclick="testCreateUserDoc()">👤 Crear Documento Usuario</button>
+        
+        <h3>3. Verificar Configuración</h3>
+        <button onclick="showConfig()">⚙️ Ver Config Firebase</button>
+        <button onclick="checkRules()">📋 Verificar Reglas</button>
+        <button onclick="clearLog()">🧹 Limpiar Log</button>
+        
+        <div id="log"></div>
+    </div>
+
+    <script>
+        // Configuración de Firebase - Tu proyecto eventos-e7a2c
+        const firebaseConfig = {
+            apiKey: "AIzaSyA1_7Ni2tTPloZLQ_g1tvucNIfpWeFNQY4",
+            authDomain: "eventos-e7a2c.firebaseapp.com",
+            projectId: "eventos-e7a2c",
+            storageBucket: "eventos-e7a2c.firebasestorage.app",
+            messagingSenderId: "277557539813",
+            appId: "1:277557539813:web:a93b387f32166de2f0750c"
+        };
+
+        let app, auth, db;
+        
+        function initFirebase() {
+            try {
+                app = firebase.initializeApp(firebaseConfig);
+                auth = firebase.auth();
+                db = firebase.firestore();
+                log('✅ Firebase inicializado correctamente', 'success');
+                return true;
+            } catch (error) {
+                log('❌ Error al inicializar Firebase: ' + error.message, 'error');
+                return false;
+            }
+        }
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            const className = type;
+            logDiv.innerHTML += `<div class="${className}">[${time}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function showStatus(message, isError = false) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status ' + (isError ? 'error' : 'success');
+            status.style.display = 'block';
+        }
+
+        async function testLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                log('⚠️ Ingresa email y contraseña', 'warning');
+                return;
+            }
+
+            try {
+                log('🔄 Intentando login con: ' + email, 'info');
+                const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                log('✅ Login exitoso! UID: ' + userCredential.user.uid, 'success');
+                log('📧 Email: ' + userCredential.user.email, 'info');
+                showStatus('✅ Login exitoso', false);
+            } catch (error) {
+                log('❌ Error en login: ' + error.code + ' - ' + error.message, 'error');
+                showStatus('❌ Error: ' + error.message, true);
+            }
+        }
+
+        async function testCreateUser() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                log('⚠️ Ingresa email y contraseña', 'warning');
+                return;
+            }
+
+            try {
+                log('🔄 Creando usuario: ' + email, 'info');
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                log('✅ Usuario creado! UID: ' + userCredential.user.uid, 'success');
+                showStatus('✅ Usuario creado exitosamente', false);
+            } catch (error) {
+                log('❌ Error al crear usuario: ' + error.code + ' - ' + error.message, 'error');
+                showStatus('❌ Error: ' + error.message, true);
+            }
+        }
+
+        async function testFirestoreRead() {
+            if (!auth.currentUser) {
+                log('⚠️ Debes hacer login primero', 'warning');
+                return;
+            }
+
+            try {
+                log('🔄 Intentando leer colección "usuarios"...', 'info');
+                const snapshot = await db.collection('usuarios').limit(5).get();
+                log('✅ Lectura exitosa! Documentos encontrados: ' + snapshot.size, 'success');
+                
+                snapshot.forEach(doc => {
+                    log('📄 Documento ID: ' + doc.id, 'info');
+                    log('   Datos: ' + JSON.stringify(doc.data()), 'info');
+                });
+                
+                showStatus('✅ Permisos de lectura OK', false);
+            } catch (error) {
+                log('❌ Error al leer: ' + error.code + ' - ' + error.message, 'error');
+                showStatus('❌ Sin permisos de lectura', true);
+            }
+        }
+
+        async function testFirestoreWrite() {
+            if (!auth.currentUser) {
+                log('⚠️ Debes hacer login primero', 'warning');
+                return;
+            }
+
+            try {
+                log('🔄 Intentando escribir en Firestore...', 'info');
+                const testDoc = {
+                    test: true,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    user: auth.currentUser.email
+                };
+                
+                await db.collection('test').add(testDoc);
+                log('✅ Escritura exitosa!', 'success');
+                showStatus('✅ Permisos de escritura OK', false);
+            } catch (error) {
+                log('❌ Error al escribir: ' + error.code + ' - ' + error.message, 'error');
+                showStatus('❌ Sin permisos de escritura', true);
+            }
+        }
+
+        async function testCreateUserDoc() {
+            if (!auth.currentUser) {
+                log('⚠️ Debes hacer login primero', 'warning');
+                return;
+            }
+
+            try {
+                const uid = auth.currentUser.uid;
+                const email = auth.currentUser.email;
+                
+                log('🔄 Creando documento de usuario...', 'info');
+                log('   UID: ' + uid, 'info');
+                log('   Email: ' + email, 'info');
+                
+                const userData = {
+                    email: email,
+                    role: 'admin',
+                    rol: 'admin',
+                    active: true,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                
+                await db.collection('usuarios').doc(uid).set(userData, { merge: true });
+                log('✅ Documento de usuario creado/actualizado!', 'success');
+                log('   Ruta: usuarios/' + uid, 'info');
+                showStatus('✅ Usuario configurado como ADMIN', false);
+            } catch (error) {
+                log('❌ Error al crear documento: ' + error.code + ' - ' + error.message, 'error');
+                showStatus('❌ Error: ' + error.message, true);
+            }
+        }
+
+        function showConfig() {
+            log('⚙️ Configuración de Firebase:', 'info');
+            log('   Project ID: ' + firebaseConfig.projectId, 'info');
+            log('   Auth Domain: ' + firebaseConfig.authDomain, 'info');
+            log('   API Key: ' + firebaseConfig.apiKey.substring(0, 20) + '...', 'info');
+            
+            if (auth.currentUser) {
+                log('👤 Usuario actual:', 'success');
+                log('   UID: ' + auth.currentUser.uid, 'info');
+                log('   Email: ' + auth.currentUser.email, 'info');
+            } else {
+                log('⚠️ No hay usuario autenticado', 'warning');
+            }
+        }
+
+        async function checkRules() {
+            log('📋 Verificando reglas de Firestore...', 'info');
+            log('   Las reglas actuales deberían permitir: read, write: true', 'info');
+            log('   Ejecuta los tests de Read y Write para verificar', 'warning');
+        }
+
+        // Inicializar Firebase al cargar la página
+        window.onload = function() {
+            if (initFirebase()) {
+                log('🚀 Herramienta de verificación lista', 'success');
+                log('✅ Configuración de Firebase cargada: eventos-e7a2c', 'success');
+                log('📝 Instrucciones: 1) Login 2) Test Read/Write 3) Crear Doc Usuario', 'info');
+            }
+        };
+
+        // Escuchar cambios en autenticación
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                log('👤 Usuario detectado: ' + user.email, 'success');
+            } else {
+                log('👤 No hay usuario autenticado', 'info');
+            }
+        });
+    </script>
+</body>
+</html>
+
