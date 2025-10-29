@@ -87,13 +87,18 @@ class _ImprovedLoginScreenState extends State<ImprovedLoginScreen> {
     }
   }
 
-  Future<void> _handleRegistration(String email, String password) async {
+ Future<void> _handleRegistration(
+    String email,
+    String password,
+    Map<String, String> profile,
+  ) async {
     setState(() => _isLoading = true);
     
     try {
       await _authController.registerWithEmailPassword(
         email: email,
         password: password,
+         profileData: profile,
       );
       
       _showSnackbar(SuccessMessages.registerSuccess);
@@ -416,55 +421,108 @@ class _ImprovedLoginScreenState extends State<ImprovedLoginScreen> {
     final emailCtrl = TextEditingController(text: hintEmail);
     final pass1Ctrl = TextEditingController();
     final pass2Ctrl = TextEditingController();
+     final nameCtrl = TextEditingController();
+    final lastNameCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final docCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
     await showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Crear cuenta (externo)'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: emailCtrl,
-                decoration: const InputDecoration(labelText: 'Correo'),
-                validator: (v) {
-                  final email = (v ?? '').trim();
-                  if (email.isEmpty) return 'Ingresa tu correo';
-                  if (!ValidationConstants.emailRegex.hasMatch(email)) {
-                    return ErrorMessages.invalidEmail;
-                  }
-                  if (_authController.isInstitutionalEmail(email)) {
-                    return 'Para institucional usa Google';
-                  }
-                  return null;
-                },
+       
+       content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: emailCtrl,
+                    decoration: const InputDecoration(labelText: 'Correo electrónico'),
+                    validator: (v) {
+                      final email = (v ?? '').trim();
+                      if (email.isEmpty) return 'Ingresa tu correo';
+                      if (!ValidationConstants.emailRegex.hasMatch(email)) {
+                        return ErrorMessages.invalidEmail;
+                      }
+                      if (_authController.isInstitutionalEmail(email)) {
+                        return 'Para institucional usa Google';
+                      }
+                      return null;
+                    },
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: nameCtrl,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(labelText: 'Nombres'),
+                    validator: (v) => (v ?? '').trim().isEmpty ? 'Ingresa tus nombres' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: lastNameCtrl,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(labelText: 'Apellidos'),
+                    validator: (v) => (v ?? '').trim().isEmpty ? 'Ingresa tus apellidos' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: phoneCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Celular de contacto',
+                      helperText: 'Usado para coordinar recordatorios del evento',
+                    ),
+                    keyboardType: TextInputType.phone,
+                    validator: (v) {
+                      final value = (v ?? '').trim();
+                      if (value.isEmpty) return 'Ingresa tu número de contacto';
+                      if (value.length < 6) return 'Número muy corto';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: docCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Documento / Código (opcional)',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: pass1Ctrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Contraseña (mín 6 caracteres)',
+                    ),
+                    validator: (v) => (v ?? '').length <
+                            ValidationConstants.minPasswordLength
+                        ? ErrorMessages.weakPassword
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: pass2Ctrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Repite contraseña',
+                    ),
+                    validator: (v) => v != pass1Ctrl.text
+                        ? 'Las contraseñas no coinciden'
+                        : null,
+                  ),
+                ],
+ ),
+
               ),
-              TextFormField(
-                controller: pass1Ctrl,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Contraseña (mín 6 caracteres)',
-                ),
-                validator: (v) => (v ?? '').length <
-                        ValidationConstants.minPasswordLength
-                    ? ErrorMessages.weakPassword
-                    : null,
-              ),
-              TextFormField(
-                controller: pass2Ctrl,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Repite contraseña',
-                ),
-                validator: (v) => v != pass1Ctrl.text
-                    ? 'Las contraseñas no coinciden'
-                    : null,
-              ),
-            ],
+
+              
           ),
+
         ),
         actions: [
           TextButton(
@@ -478,6 +536,12 @@ class _ImprovedLoginScreenState extends State<ImprovedLoginScreen> {
               await _handleRegistration(
                 emailCtrl.text.trim(),
                 pass1Ctrl.text,
+                 {
+                  'nombres': nameCtrl.text.trim(),
+                  'apellidos': lastNameCtrl.text.trim(),
+                  'telefono': phoneCtrl.text.trim(),
+                  'documento': docCtrl.text.trim(),
+                },
               );
             },
             child: const Text('Crear'),
