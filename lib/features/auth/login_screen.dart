@@ -143,14 +143,37 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   // ------------------ REGISTRO EMAIL ------------------
-  Future<void> _registerEmail(String email, String pass) async {
+  Future<void> _registerEmail(
+    String email,
+    String pass,
+    Map<String, String> profile,
+  ) async {
     setState(() => _loading = true);
     try {
       final cred = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(email: email, password: pass);
+       final nombres = (profile['nombres'] ?? '').trim();
+      final apellidos = (profile['apellidos'] ?? '').trim();
+      final telefono = (profile['telefono'] ?? '').trim();
+      final documento = (profile['documento'] ?? '').trim();
+      final displayName = [nombres, apellidos]
+          .where((s) => s.isNotEmpty)
+          .join(' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+
+      if (displayName.isNotEmpty) {
+        await cred.user!.updateDisplayName(displayName);
+      }
       await FirebaseFirestore.instance.collection('usuarios').doc(cred.user!.uid).set({
         'email'          : email.toLowerCase(),
-        'displayName'    : cred.user!.displayName ?? '',
+        'displayName'    : displayName.isNotEmpty
+            ? displayName
+            : (cred.user!.displayName ?? ''),
+        'nombres'        : nombres,
+        'apellidos'      : apellidos,
+        if (telefono.isNotEmpty) 'telefono': telefono,
+        if (documento.isNotEmpty) 'documento': documento,
         'photoURL'       : cred.user!.photoURL ?? '',
         'domain'         : email.split('@').last,
         'modo'           : 'externo',
@@ -159,6 +182,7 @@ class _LoginScreenState extends State<LoginScreen> {
         'active'         : true,
         'estado'         : 'activo',
         'isInstitutional': false,
+        'profileCompleted': true,
         'createdAt'      : FieldValue.serverTimestamp(),
         'updatedAt'      : FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
@@ -599,42 +623,95 @@ class _LoginScreenState extends State<LoginScreen> {
     final emailCtrl = TextEditingController(text: hintEmail);
     final pass1Ctrl = TextEditingController();
     final pass2Ctrl = TextEditingController();
+     final nameCtrl = TextEditingController();
+    final lastNameCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final docCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
     await showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Crear cuenta (externo)'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: emailCtrl,
-                decoration: const InputDecoration(labelText: 'Correo'),
-                validator: (v) {
-                  final email = (v ?? '').trim();
-                  final re = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
-                  if (email.isEmpty) return 'Ingresa tu correo';
-                  if (!re.hasMatch(email)) return 'Correo inválido';
-                  if (_esInstitucional(email)) return 'Para institucional usa Google';
-                  return null;
-                },
+       
+content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: emailCtrl,
+                    decoration: const InputDecoration(labelText: 'Correo electrónico'),
+                    validator: (v) {
+                      final email = (v ?? '').trim();
+                      final re = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
+                      if (email.isEmpty) return 'Ingresa tu correo';
+                      if (!re.hasMatch(email)) return 'Correo inválido';
+                      if (_esInstitucional(email)) return 'Para institucional usa Google';
+                      return null;
+                    },
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: nameCtrl,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(labelText: 'Nombres'),
+                    validator: (v) => (v ?? '').trim().isEmpty ? 'Ingresa tus nombres' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: lastNameCtrl,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(labelText: 'Apellidos'),
+                    validator: (v) => (v ?? '').trim().isEmpty ? 'Ingresa tus apellidos' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: phoneCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Celular de contacto',
+                      helperText: 'Usado para coordinar recordatorios del evento',
+                    ),
+                    keyboardType: TextInputType.phone,
+                    validator: (v) {
+                      final value = (v ?? '').trim();
+                      if (value.isEmpty) return 'Ingresa tu número de contacto';
+                      if (value.length < 6) return 'Número muy corto';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: docCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Documento / Código (opcional)',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: pass1Ctrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: 'Contraseña (min 6)'),
+                    validator: (v) => (v ?? '').length < 6 ? 'Mínimo 6' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: pass2Ctrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: 'Repite contraseña'),
+                    validator: (v) => v != pass1Ctrl.text ? 'No coincide' : null,
+                  ),
+                ],
+                ),
+
+
+
               ),
-              TextFormField(
-                controller: pass1Ctrl,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'Contraseña (min 6)'),
-                validator: (v) => (v ?? '').length < 6 ? 'Mínimo 6' : null,
-              ),
-              TextFormField(
-                controller: pass2Ctrl,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'Repite contraseña'),
-                validator: (v) => v != pass1Ctrl.text ? 'No coincide' : null,
-              ),
-            ],
+            
           ),
         ),
         actions: [
@@ -643,7 +720,16 @@ class _LoginScreenState extends State<LoginScreen> {
             onPressed: () async {
               if (!formKey.currentState!.validate()) return;
               Navigator.pop(context);
-              await _registerEmail(emailCtrl.text.trim(), pass1Ctrl.text);
+             await _registerEmail(
+                emailCtrl.text.trim(),
+                pass1Ctrl.text,
+                {
+                  'nombres': nameCtrl.text.trim(),
+                  'apellidos': lastNameCtrl.text.trim(),
+                  'telefono': phoneCtrl.text.trim(),
+                  'documento': docCtrl.text.trim(),
+                },
+              );
             },
             child: const Text('Crear'),
           ),

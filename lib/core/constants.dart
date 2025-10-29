@@ -83,6 +83,9 @@ class ValidationConstants {
   static const int maxDescriptionLength = 500;
   
   static final RegExp emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
+  static final RegExp peruvianDniRegex = RegExp(r'^\d{8}$');
+  static final RegExp peruvianPhoneRegex = RegExp(r'^9\d{8}$');
+
 }
 
 /// Constantes de la UI

@@ -121,23 +121,41 @@ class AuthController {
   Future<UserCredential> registerWithEmailPassword({
     required String email,
     required String password,
-     required Map<String, dynamic> profileData,
+    required Map<String, dynamic> profileData,
   }) async {
     try {
-      AppLogger.info('Registrando nuevo usuario: $email');
+     final normalizedEmail = email.trim().toLowerCase();
+      AppLogger.info('Registrando nuevo usuario: $normalizedEmail');
 
-      if (isInstitutionalEmail(email)) {
+     if (isInstitutionalEmail(normalizedEmail)) {
         throw ErrorMessages.institutionalOnly;
       }
 
-      final credential = await _auth.createUserWithEmailAndPassword(
-        email: email.trim().toLowerCase(),
-        password: password,
-      );
+    
       final nombres = (profileData['nombres'] ?? '').toString().trim();
       final apellidos = (profileData['apellidos'] ?? '').toString().trim();
       final telefono = (profileData['telefono'] ?? '').toString().trim();
       final documento = (profileData['documento'] ?? '').toString().trim();
+      
+       if (documento.isNotEmpty) {
+        final existingByDocument = await _firestore
+            .collection(FirestoreCollections.users)
+            .where('documento', isEqualTo: documento)
+            .limit(1)
+            .get();
+
+        if (existingByDocument.docs.isNotEmpty) {
+          AppLogger.warning('Documento duplicado para $normalizedEmail');
+          throw ErrorMessages.documentAlreadyInUse;
+        }
+      }
+
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: normalizedEmail,
+        password: password,
+      );
+      
+      
       final displayName = [nombres, apellidos]
           .where((part) => part.isNotEmpty)
           .join(' ')
