@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/error_handler.dart';
 import '../../core/constants.dart';
+import '../../services/registration_service.dart';
 import 'utils/csv_downloader.dart';
 import 'forms/event_form.dart';
 import 'forms/session_form.dart';
@@ -36,6 +37,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   final _eventSvc = AdminEventService();
   final _sesSvc   = AdminSessionService();
   final _spkSvc   = AdminSpeakerService();
+    final _regSvc   = RegistrationService();
 
   
   @override
@@ -107,6 +109,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   key: ValueKey(_tab),
                   eventSvc: _eventSvc,
                   sesSvc: _sesSvc,
+                   regSvc: _regSvc,
                   
                 ),
                 _Tab.ponentes  => _PonentesTab(key: ValueKey(_tab), spkSvc: _spkSvc),
@@ -814,7 +817,8 @@ class _FacultyMetrics extends StatelessWidget {
 class _EventosTab extends StatelessWidget {
   final AdminEventService eventSvc;
   final AdminSessionService sesSvc;
-  const _EventosTab({super.key, required this.eventSvc, required this.sesSvc});
+   final RegistrationService regSvc;
+  const _EventosTab({super.key, required this.eventSvc, required this.sesSvc, required this.regSvc});
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -844,6 +848,7 @@ class _EventosTab extends StatelessWidget {
                   cs: cs,
                   eventSvc: eventSvc,
                   sesSvc: sesSvc,
+                  regSvc: regSvc,
                 ),
                 separatorBuilder: (_, __) => const SizedBox(height: 20),
                 itemCount: events.length,
@@ -865,12 +870,14 @@ class _EventCard extends StatelessWidget {
   final ColorScheme cs;
   final AdminEventService eventSvc;
   final AdminSessionService sesSvc;
+  final RegistrationService regSvc;
 
   const _EventCard({
     required this.event,
     required this.cs,
     required this.eventSvc,
     required this.sesSvc,
+    required this.regSvc,
     
   });
 
@@ -1084,6 +1091,14 @@ if (event.dias.isNotEmpty) ...[
             ),
           ),
           const SizedBox(height: 12),
+           Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+            child: _EventRegistrationsSection(
+              event: event,
+              regSvc: regSvc,
+              cs: cs,
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
             child: StreamBuilder<List<AdminSessionModel>>(
@@ -1274,6 +1289,144 @@ class _DayChip extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+class _EventRegistrationsSection extends StatelessWidget {
+  final AdminEventModel event;
+  final RegistrationService regSvc;
+  final ColorScheme cs;
+
+  const _EventRegistrationsSection({
+    required this.event,
+    required this.regSvc,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<EventRegistrationInfo>>(
+      stream: regSvc.watchEventRegistrations(event.id),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return _SectionPlaceholder(
+            icon: Icons.warning_amber_rounded,
+            message: 'Error al cargar inscripciones: ${snapshot.error}',
+            cs: cs,
+          );
+        }
+
+        final registrations = snapshot.data ?? const <EventRegistrationInfo>[];
+        final students = registrations.where((reg) {
+          final role = reg.user?.role?.toLowerCase();
+          if (role == null) return true;
+          return role == 'estudiante' || role == 'student';
+        }).toList();
+
+        if (students.isEmpty) {
+          return _SectionPlaceholder(
+            icon: Icons.person_outline,
+            message: 'Sin estudiantes inscritos todavía.',
+            cs: cs,
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.how_to_reg_rounded, size: 20, color: cs.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Estudiantes inscritos (${students.length})',
+                  style: TextStyle(
+                    color: cs.onSurface,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: students.length,
+              separatorBuilder: (_, __) => Divider(
+                height: 18,
+                color: cs.surfaceVariant.withOpacity(0.5),
+              ),
+              itemBuilder: (context, index) {
+                final reg = students[index];
+                final user = reg.user;
+                final displayName = user?.displayName?.trim();
+                final email = user?.email.trim();
+                final fallbackName = (displayName != null && displayName.isNotEmpty)
+                    ? displayName
+                    : (email != null && email.isNotEmpty)
+                        ? email
+                        : reg.uid;
+                final initials = fallbackName.trim().isNotEmpty
+                    ? fallbackName.trim().substring(0, 1).toUpperCase()
+                    : '?';
+
+                final subtitleParts = <String>[];
+                if (email != null && email.isNotEmpty && email != fallbackName) {
+                  subtitleParts.add(email);
+                }
+                final faculty = user?.faculty?.trim();
+                if (faculty != null && faculty.isNotEmpty) {
+                  subtitleParts.add('Facultad: $faculty');
+                }
+                if (reg.isSessionScope) {
+                  final sessionLabel = (reg.sessionTitle?.trim().isNotEmpty ?? false)
+                      ? reg.sessionTitle!.trim()
+                      : (reg.sessionId ?? 'Sesión');
+                  subtitleParts.add('Ponencia: $sessionLabel');
+                } else {
+                  subtitleParts.add('Registro general del evento');
+                }
+                if (reg.createdAt != null) {
+                  subtitleParts.add('Inscrito el ${_formatDate(reg.createdAt!)}');
+                }
+
+                final subtitle = subtitleParts.join(' • ');
+
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    backgroundColor: cs.primaryContainer,
+                    foregroundColor: cs.onPrimaryContainer,
+                    child: Text(initials),
+                  ),
+                  title: Text(
+                    fallbackName,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: subtitle.isNotEmpty ? Text(subtitle) : null,
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _formatDate(DateTime dt) {
+    final dd = dt.day.toString().padLeft(2, '0');
+    final mm = dt.month.toString().padLeft(2, '0');
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mi = dt.minute.toString().padLeft(2, '0');
+    return '$dd/$mm/${dt.year} $hh:$mi';
   }
 }
 

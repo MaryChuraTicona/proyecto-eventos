@@ -2,6 +2,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/error_handler.dart';
+import '../models/app_user.dart';
 import 'attendance_service.dart';
 
 class RegistrationService {
@@ -19,7 +20,103 @@ class RegistrationService {
         .where('uid', isEqualTo: uid)
         .snapshots();
   }
+ /// Stream de estudiantes inscritos en un evento (registro general o por sesión).
+  Stream<List<EventRegistrationInfo>> watchEventRegistrations(String eventId) {
+    return _db
+        .collection(_collectionName)
+        .where('eventId', isEqualTo: eventId)
+        .snapshots()
+        .asyncMap((snap) async {
+      if (snap.docs.isEmpty) return <EventRegistrationInfo>[];
 
+      final userIds = <String>{};
+      final sessionIds = <String>{};
+
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final uid = (data['uid'] ?? '').toString();
+        if (uid.isNotEmpty) userIds.add(uid);
+
+        final sessionId = (data['sessionId'] as String?)?.trim();
+        if (sessionId != null && sessionId.isNotEmpty) {
+          sessionIds.add(sessionId);
+        }
+      }
+
+      final userEntries = await Future.wait(userIds.map((uid) async {
+        try {
+          final userDoc = await _db.collection('users').doc(uid).get();
+          return MapEntry(uid, userDoc.exists ? AppUser.fromDoc(userDoc) : null);
+        } catch (e) {
+          AppLogger.warning('Error al cargar usuario $uid para evento $eventId: $e');
+          return MapEntry(uid, null);
+        }
+      }));
+      final userMap = <String, AppUser?>{for (final entry in userEntries) entry.key: entry.value};
+
+      final sessionEntries = await Future.wait(sessionIds.map((sessionId) async {
+        try {
+          final sessionDoc = await _db
+              .collection('eventos')
+              .doc(eventId)
+              .collection('sesiones')
+              .doc(sessionId)
+              .get();
+          if (!sessionDoc.exists) return MapEntry(sessionId, null);
+          final data = sessionDoc.data() ?? {};
+          final title = (data['titulo'] ?? data['title'] ?? '').toString();
+          return MapEntry(sessionId, title.isEmpty ? null : title);
+        } catch (e) {
+          AppLogger.warning('Error al cargar sesión $sessionId para evento $eventId: $e');
+          return MapEntry(sessionId, null);
+        }
+      }));
+      final sessionMap = <String, String?>{for (final entry in sessionEntries) entry.key: entry.value};
+
+      DateTime? _toDate(dynamic value) {
+        if (value is Timestamp) return value.toDate();
+        if (value is DateTime) return value;
+        return null;
+      }
+
+      Map<String, dynamic> _mapAnswers(dynamic raw) {
+        if (raw is Map<String, dynamic>) return Map<String, dynamic>.from(raw);
+        if (raw is Map) {
+          return raw.map((key, value) => MapEntry(key.toString(), value));
+        }
+        return <String, dynamic>{};
+      }
+
+      final list = snap.docs.map((doc) {
+        final data = doc.data();
+        final uid = (data['uid'] ?? '').toString();
+        if (uid.isEmpty) return null;
+
+        final sessionId = (data['sessionId'] as String?)?.trim();
+        final scope = (data['scope'] ?? (sessionId == null ? 'event' : 'session')).toString();
+        final createdAt = _toDate(data['createdAt']);
+        final answers = _mapAnswers(data['answers']);
+
+        return EventRegistrationInfo(
+          uid: uid,
+          user: userMap[uid],
+          sessionId: sessionId,
+          sessionTitle: sessionId != null ? sessionMap[sessionId] : null,
+          scope: scope,
+          createdAt: createdAt,
+          answers: answers,
+        );
+      }).whereType<EventRegistrationInfo>().toList();
+
+      list.sort((a, b) {
+        final aTime = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bTime = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bTime.compareTo(aTime);
+      });
+
+      return list;
+    });
+  }
   String _docId(String eventId, String uid, [String? sessionId]) {
     // Sin sesión:   evento_uid
     // Con sesión:   evento_sesion_uid
@@ -230,4 +327,26 @@ class UserSessionStatus {
   final bool registered;
   final bool attended;
   const UserSessionStatus({required this.registered, required this.attended});
+}
+class EventRegistrationInfo {
+  final String uid;
+  final AppUser? user;
+  final String? sessionId;
+  final String? sessionTitle;
+  final String scope;
+  final DateTime? createdAt;
+  final Map<String, dynamic> answers;
+
+  const EventRegistrationInfo({
+    required this.uid,
+    required this.user,
+    required this.sessionId,
+    required this.sessionTitle,
+    required this.scope,
+    required this.createdAt,
+    required this.answers,
+  });
+
+  bool get isSessionScope => scope == 'session' || (sessionId != null && sessionId!.isNotEmpty);
+  bool get isEventScope => !isSessionScope;
 }
