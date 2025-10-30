@@ -116,9 +116,26 @@ class _AvailableEventsTab extends StatelessWidget {
         final docs = (snap.data?.docs ?? [])
             .where((d) {
               final data = d.data();
-              final estado = (data['estado'] ?? 'borrador').toString();
+              final estado = (data['estado'] ?? 'borrador')
+                  .toString()
+                  .toLowerCase();
               final fi = _toDate(data['fechaInicio']);
-              return estado == 'activo' && (fi == null || !fi.isBefore(now));
+             final ff = _toDate(data['fechaFin']);
+              final allowedStates = {
+                'activo',
+                'publicado',
+                'en curso',
+                'habilitado',
+                'vigente',
+              };
+              final isActive = allowedStates.contains(estado);
+              if (!isActive) return false;
+
+              // Mostrar eventos activos aunque hayan iniciado hace poco.
+              final tolerance = now.subtract(const Duration(days: 7));
+              final inRange = fi == null || fi.isAfter(tolerance) ||
+                  (ff != null && ff.isAfter(now));
+              return inRange;
             })
             .toList();
 
@@ -129,53 +146,365 @@ class _AvailableEventsTab extends StatelessWidget {
             subtitle: 'Por el momento no hay eventos publicados. Cuando haya nuevos eventos disponibles, aparecerán aquí automáticamente.',
           );
         }
+ QueryDocumentSnapshot<Map<String, dynamic>>? featuredCatec;
+        final remainingDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+        for (final doc in docs) {
+          final data = doc.data();
+          final nombre = (data['nombre'] ?? '').toString().toUpperCase();
+          if (featuredCatec == null && nombre.contains('CATEC')) {
+            featuredCatec = doc;
+          } else {
+            remainingDocs.add(doc);
+          }
+        }
+
+        final totalItems = remainingDocs.length + (featuredCatec != null ? 1 : 0);
+
 
         return ListView.separated(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          itemCount: docs.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (context, i) {
-            final d = docs[i].data();
-            final id = docs[i].id;
-            final nombre = (d['nombre'] ?? '').toString();
-            final lugar = (d['lugarGeneral'] ?? '').toString();
-            final fi = _toDate(d['fechaInicio']);
-            final ff = _toDate(d['fechaFin']);
+          
+           itemCount: totalItems,
+          separatorBuilder: (_, index) {
+            if (featuredCatec != null && index == 0) {
+              return const SizedBox(height: 20);
+            }
+            return const SizedBox(height: 12);
+          },
+          itemBuilder: (context, index) {
+            if (featuredCatec != null && index == 0) {
+              return _FeaturedCatecCard(doc: featuredCatec!);
+            }
 
-            final when = '${_fmt(fi)}${ff != null ? ' – ${_fmt(ff)}' : ''}';
-            final subtitleParts = <String>[when];
-            if (lugar.isNotEmpty) subtitleParts.add(lugar);
-
-            return Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-                side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-              ),
-              child: ListTile(
-                leading: const Icon(Icons.event_outlined),
-                title: Text(
-                  nombre,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                subtitle: Text(subtitleParts.join(' • ')),
-                trailing: FilledButton.tonalIcon(
-                  icon: const Icon(Icons.chevron_right),
-                  label: const Text('Ver detalles'),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => StudentEventDetailScreen(eventId: id),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            );
+            final adjustedIndex = featuredCatec != null ? index - 1 : index;
+            final doc = remainingDocs[adjustedIndex];
+            return _StandardEventCard(doc: doc);
           },
         );
       },
+    );
+  }
+}
+
+            class _FeaturedCatecCard extends StatelessWidget {
+  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+   const _FeaturedCatecCard({required this.doc});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final data = doc.data();
+    final id = doc.id;
+    final nombre = (data['nombre'] ?? 'CATEC').toString();
+    final descripcion = (data['descripcion'] ?? '').toString();
+    final lugar = (data['lugarGeneral'] ?? '').toString();
+    final fi = _toDate(data['fechaInicio']);
+    final ff = _toDate(data['fechaFin']);
+    final when = '${_fmt(fi)}${ff != null ? ' – ${_fmt(ff)}' : ''}';
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: cs.primary.withOpacity(0.25),
+            blurRadius: 28,
+            offset: const Offset(0, 16),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: Stack(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    cs.primary.withOpacity(0.95),
+                    cs.secondary.withOpacity(0.9),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+            Positioned(
+              right: -16,
+              bottom: -12,
+              child: Icon(
+                Icons.auto_awesome_rounded,
+                size: 160,
+                color: cs.onPrimary.withOpacity(0.08),
+              ),
+
+),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 26, 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: cs.onPrimary.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(100),
+                      border: Border.all(color: cs.onPrimary.withOpacity(0.18)),
+                    ),
+                    child: Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 6,
+                      children: [
+                        Icon(Icons.auto_awesome, size: 16, color: cs.onPrimary),
+                        Text(
+                          'Evento destacado',
+                          style: TextStyle(
+                            color: cs.onPrimary,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    nombre,
+                    style: TextStyle(
+                      color: cs.onPrimary,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 22,
+                      height: 1.2,
+                    ),
+                  ),
+                  if (descripcion.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      descripcion,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: cs.onPrimary.withOpacity(0.9),
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 18),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _InfoPill(
+                        icon: Icons.calendar_month_rounded,
+                        label: when,
+                        background: cs.onPrimary.withOpacity(0.15),
+                        foreground: cs.onPrimary,
+                      ),
+                      if (lugar.isNotEmpty)
+                        _InfoPill(
+                          icon: Icons.place_outlined,
+                          label: lugar,
+                          background: cs.onPrimary.withOpacity(0.12),
+                          foreground: cs.onPrimary,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: cs.onPrimary,
+                        foregroundColor: cs.primary,
+                      ),
+                      icon: const Icon(Icons.chevron_right_rounded),
+                      label: const Text('Descubrir CATEC'),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => StudentEventDetailScreen(eventId: id),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StandardEventCard extends StatelessWidget {
+  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+
+  const _StandardEventCard({required this.doc});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final data = doc.data();
+    final id = doc.id;
+    final nombre = (data['nombre'] ?? '').toString();
+    final descripcion = (data['descripcionCorta'] ?? data['descripcion'] ?? '')
+        .toString();
+    final lugar = (data['lugarGeneral'] ?? '').toString();
+    final fi = _toDate(data['fechaInicio']);
+    final ff = _toDate(data['fechaFin']);
+    final when = '${_fmt(fi)}${ff != null ? ' – ${_fmt(ff)}' : ''}';
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: cs.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    Icons.event_outlined,
+                    size: 22,
+                    color: cs.primary,
+                  ),
+             
+                ),
+               
+  const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        nombre,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 17,
+                        ),
+
+                      ),
+                   
+
+                 if (descripcion.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          descripcion,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: cs.onSurfaceVariant,
+                            fontSize: 13,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _InfoPill(
+                  icon: Icons.calendar_today_rounded,
+                  label: when,
+                  background: cs.primaryContainer.withOpacity(0.25),
+                  foreground: cs.primary,
+                ),
+                if (lugar.isNotEmpty)
+                  _InfoPill(
+                    icon: Icons.place_outlined,
+                    label: lugar,
+                    background: cs.secondaryContainer.withOpacity(0.22),
+                    foreground: cs.secondary,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.tonalIcon(
+                icon: const Icon(Icons.chevron_right),
+                label: const Text('Ver detalles'),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => StudentEventDetailScreen(eventId: id),
+                    ),
+                  );
+                },
+              ),
+            
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color background;
+  final Color foreground;
+
+  const _InfoPill({
+    required this.icon,
+    required this.label,
+    required this.background,
+    required this.foreground,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 6,
+        children: [
+          Icon(icon, size: 16, color: foreground),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: foreground,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+        
+      
     );
   }
 }
@@ -223,6 +552,7 @@ class _MyHistoryTab extends StatelessWidget {
           separatorBuilder: (_, __) => const SizedBox(height: 12),
           itemBuilder: (context, i) {
             final it = items[i];
+            final cs = Theme.of(context).colorScheme;
             final rango = '${_hm(it.horaInicio)} – ${_hm(it.horaFin)}';
             final estadoAsistencia = it.attended
                 ? 'Asistido'
@@ -230,11 +560,16 @@ class _MyHistoryTab extends StatelessWidget {
                     ? 'Finalizado'
                     : 'Inscrito';
 
-            final subtitleParts = <String>[
-              it.eventName,
-              if (it.dia.isNotEmpty) it.dia,
-              rango,
-            ];
+            final estadoIcon = it.attended
+                ? Icons.verified_rounded
+                : it.finished
+                    ? Icons.history_toggle_off_rounded
+                    : Icons.event_available_rounded;
+            final dayLabel = it.dia.isNotEmpty
+                ? it.dia
+                : _friendlyDay(it.horaInicio);
+            final registeredAtLabel =
+                it.createdAt != null ? _formatRegistrationDate(it.createdAt!) : null;
 
             return Card(
               elevation: 0,
@@ -242,24 +577,103 @@ class _MyHistoryTab extends StatelessWidget {
                 borderRadius: BorderRadius.circular(18),
                 side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
               ),
-              child: ListTile(
-                leading: const Icon(Icons.schedule_outlined),
-                title: Text(
-                  it.titulo,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                subtitle: Text(subtitleParts.join(' • ')),
-                trailing: FilledButton.tonalIcon(
-                  icon: const Icon(Icons.receipt_long_outlined),
-                  label: Text(estadoAsistencia),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => StudentEventDetailScreen(eventId: it.eventId),
+              
+               child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: cs.primaryContainer.withOpacity(0.6),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Icon(
+                            Icons.schedule_outlined,
+                            size: 22,
+                            color: cs.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                it.titulo,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                it.eventName,
+                                style: TextStyle(
+                                  color: cs.onSurfaceVariant,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        FilledButton.tonalIcon(
+                          icon: Icon(estadoIcon, size: 18),
+                          label: Text(estadoAsistencia),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => StudentEventDetailScreen(eventId: it.eventId),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _InfoPill(
+                          icon: Icons.event_outlined,
+                          label: dayLabel,
+                          background: cs.primaryContainer.withOpacity(0.25),
+                          foreground: cs.primary,
+                        ),
+                        _InfoPill(
+                          icon: Icons.access_time_rounded,
+                          label: rango,
+                          background: cs.secondaryContainer.withOpacity(0.22),
+                          foreground: cs.secondary,
+                        ),
+                        if (it.location.isNotEmpty)
+                          _InfoPill(
+                            icon: Icons.place_outlined,
+                            label: it.location,
+                            background: cs.tertiaryContainer.withOpacity(0.2),
+                            foreground: cs.tertiary,
+                          ),
+                      ],
+                    ),
+                    if (registeredAtLabel != null) ...[
+                      const SizedBox(height: 14),
+                      Text(
+                        'Inscrito el $registeredAtLabel',
+                        style: TextStyle(
+                          color: cs.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
                       ),
-                    );
-                  },
+                    
+                  ],
+                  ],
                 ),
               ),
             );
@@ -294,6 +708,45 @@ String _hm(Timestamp ts) {
   return '$hh:$mm';
 }
 
+String _friendlyDay(Timestamp ts) {
+  final d = ts.toDate();
+  const weekdays = [
+    'Lunes',
+    'Martes',
+    'Miércoles',
+    'Jueves',
+    'Viernes',
+    'Sábado',
+    'Domingo',
+  ];
+  const months = [
+    'enero',
+    'febrero',
+    'marzo',
+    'abril',
+    'mayo',
+    'junio',
+    'julio',
+    'agosto',
+    'septiembre',
+    'octubre',
+    'noviembre',
+    'diciembre',
+  ];
+  final weekday = weekdays[(d.weekday - 1) % weekdays.length];
+  final month = months[(d.month - 1) % months.length];
+  final capitalizedMonth = month[0].toUpperCase() + month.substring(1);
+  return '$weekday ${d.day} de $capitalizedMonth ${d.year}';
+}
+
+String _formatRegistrationDate(Timestamp ts) {
+  final d = ts.toDate();
+  final dd = d.day.toString().padLeft(2, '0');
+  final mm = d.month.toString().padLeft(2, '0');
+  final hh = d.hour.toString().padLeft(2, '0');
+  final mi = d.minute.toString().padLeft(2, '0');
+  return '$dd/$mm/${d.year} $hh:$mi';
+}
 class _EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;

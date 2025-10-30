@@ -141,6 +141,7 @@ class EventService {
             start: null,
             end: null,
             sessions: const [],
+            organizers: const [],
           );
           continue;
         }
@@ -170,6 +171,10 @@ class EventService {
             );
           }).toList();
 
+ final organizers = ((d['organizers'] as List?) ?? const [])
+              .map((raw) => EventOrganizerView.fromMap(raw))
+              .where((o) => o.isValid)
+              .toList();
           yield EventView(
             id: evSnap.id,
             name: (d['nombre'] ?? d['title'] ?? '').toString(),
@@ -177,6 +182,7 @@ class EventService {
             start: _toDate(d['fechaInicio'] ?? d['startAt']),
             end: _toDate(d['fechaFin'] ?? d['endAt']),
             sessions: sessions,
+              organizers: organizers,
           );
         } catch (e, st) {
           AppLogger.error('Error al cargar sesiones del evento $eventId', e, st);
@@ -189,6 +195,10 @@ class EventService {
             start: _toDate(d['fechaInicio'] ?? d['startAt']),
             end: _toDate(d['fechaFin'] ?? d['endAt']),
             sessions: const [],
+             organizers: ((d['organizers'] as List?) ?? const [])
+                .map((raw) => EventOrganizerView.fromMap(raw))
+                .where((o) => o.isValid)
+                .toList(),
           );
         }
       }
@@ -207,6 +217,7 @@ class EventView {
   final DateTime? start;
   final DateTime? end;
   final List<SessionView> sessions;
+  final List<EventOrganizerView> organizers;
 
   EventView({
     required this.id,
@@ -215,7 +226,42 @@ class EventView {
     required this.start,
     required this.end,
     required this.sessions,
+    required this.organizers,
   });
+}
+
+class EventOrganizerView {
+  final String uid;
+  final String email;
+  final String displayName;
+
+  EventOrganizerView({
+    required this.uid,
+    required this.email,
+    required this.displayName,
+  });
+   factory EventOrganizerView.fromMap(dynamic raw) {
+    if (raw is Map<String, dynamic>) {
+      return EventOrganizerView(
+        uid: (raw['uid'] ?? raw['id'] ?? '').toString(),
+        email: (raw['email'] ?? '').toString(),
+        displayName:
+            (raw['displayName'] ?? raw['nombre'] ?? raw['email'] ?? '').toString(),
+      );
+    }
+    if (raw is Map) {
+      final map = raw.map((key, value) => MapEntry(key.toString(), value));
+      return EventOrganizerView(
+        uid: (map['uid'] ?? map['id'] ?? '').toString(),
+        email: (map['email'] ?? '').toString(),
+        displayName:
+            (map['displayName'] ?? map['nombre'] ?? map['email'] ?? '').toString(),
+      );
+    }
+    return EventOrganizerView(uid: '', email: '', displayName: '');
+  }
+
+  bool get isValid => uid.isNotEmpty;
 }
 
 /// 🔸 Modelo de cada ponencia o sesión

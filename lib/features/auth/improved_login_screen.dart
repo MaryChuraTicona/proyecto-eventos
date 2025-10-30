@@ -1,8 +1,8 @@
 // lib/features/auth/improved_login_screen.dart
 import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import '../../core/constants.dart';
 import '../../core/error_handler.dart';
 import 'auth_controller.dart';

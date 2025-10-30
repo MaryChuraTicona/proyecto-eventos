@@ -8,6 +8,7 @@ import '../core/constants.dart';
 import '../core/error_handler.dart';
 import '../features/admin/admin_home_screen.dart';
 import '../features/events/student_home_screen.dart';
+import '../features/organizer/organizer_home_screen.dart';
 import '../features/student/faculty_selection_screen.dart';
 
 // Stubs (si los tienes ya, quita esto)
@@ -111,10 +112,11 @@ Future<Widget> goHomeByRolWidget(BuildContext context, User user) async {
     }
 
     final Widget home = switch (role) {
-      UserRoles.admin   => const AdminHomeScreen(),
-      UserRoles.teacher => const DocenteHome(),
-      UserRoles.speaker => const PonenteHome(),
-      _                 => const StudentHomeScreen(),
+      UserRoles.admin      => const AdminHomeScreen(),
+      UserRoles.teacher    => const DocenteHome(),
+      UserRoles.speaker    => const PonenteHome(),
+      UserRoles.organizer  => const OrganizerHomeScreen(),
+      _                    => const StudentHomeScreen(),
     };
     
     AppLogger.success('Redirigiendo a pantalla: ${home.runtimeType}');
@@ -184,10 +186,11 @@ Future<void> goHomeByRol(BuildContext context) async {
     }
 
     final Widget home = switch (role) {
-      UserRoles.admin   => const AdminHomeScreen(),
-      UserRoles.teacher => const DocenteHome(),
-      UserRoles.speaker => const PonenteHome(),
-      _                 => const StudentHomeScreen(),
+        UserRoles.admin      => const AdminHomeScreen(),
+      UserRoles.teacher    => const DocenteHome(),
+      UserRoles.speaker    => const PonenteHome(),
+      UserRoles.organizer  => const OrganizerHomeScreen(),
+      _                    => const StudentHomeScreen(),
     };
 
     if (!context.mounted) return;

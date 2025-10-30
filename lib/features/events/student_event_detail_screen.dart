@@ -7,7 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../services/event_service.dart';          // define EventView y SessionView
 import '../../services/registration_service.dart';
 import '../../services/attendance_service.dart';
-
+import 'widgets/certificate_status_card.dart';
 class StudentEventDetailScreen extends StatelessWidget {
   final String eventId;
   const StudentEventDetailScreen({super.key, required this.eventId});
@@ -62,6 +62,10 @@ class _EventDetailBody extends StatelessWidget {
                 ),
               ),
             ),
+            if (ev.organizers.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _OrganizerStrip(organizers: ev.organizers),
+            ],
             const SizedBox(height: 12),
              EventRegistrationGate(
               eventId: eventId,
@@ -70,6 +74,14 @@ class _EventDetailBody extends StatelessWidget {
               email: email,
             ),
             const SizedBox(height: 12),
+            CertificateStatusCard(
+              eventId: eventId,
+              eventName: ev.name,
+              uid: uid,
+              email: email,
+            ),
+            const SizedBox(height: 12),
+
             const Text('Ponencias', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
             if (ev.sessions.isEmpty)
@@ -94,7 +106,61 @@ class _EventDetailBody extends StatelessWidget {
     return '$dd/$mm/${dt.year} $hh:$mi';
   }
 }
+class _OrganizerStrip extends StatelessWidget {
+  final List<EventOrganizerView> organizers;
+  const _OrganizerStrip({required this.organizers});
 
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      elevation: 0,
+      color: cs.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.groups_rounded, color: cs.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Organizadores estudiantiles',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: cs.primary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: organizers
+                  .map(
+                    (org) => Chip(
+                      avatar: const CircleAvatar(
+                        child: Icon(Icons.person_outline, size: 16),
+                      ),
+                      label: Text(org.displayName.isNotEmpty
+                          ? org.displayName
+                          : org.email),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+   }
 class _SessionTile extends StatefulWidget {
   final String eventId;
   final SessionView s;

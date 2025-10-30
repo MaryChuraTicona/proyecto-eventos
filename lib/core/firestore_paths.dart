@@ -10,6 +10,7 @@ class FirestorePaths {
   static const String eventos = FirestoreCollections.events;
   static const String ponentes = FirestoreCollections.speakers;
   static const String sesiones = FirestoreCollections.sessions;
+    static const String certificados = FirestoreCollections.certificates;
 
   // Helpers para paths completos
   static String user(String uid) => '$users/$uid';
@@ -28,6 +29,9 @@ class FirestorePaths {
   static String attendances(String eventId) => 
       '$eventos/$eventId/${FirestoreCollections.attendance}';
   
-  static String attendance(String eventId, String uid) => 
+      static String attendance(String eventId, String uid) =>
       '$eventos/$eventId/${FirestoreCollections.attendance}/$uid';
+
+  static String certificate(String eventId, String uid) =>
+      '${FirestoreCollections.certificates}/$eventId_$uid';
 }

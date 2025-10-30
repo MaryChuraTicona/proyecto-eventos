@@ -8,6 +8,7 @@ class FirestoreCollections {
   static const String speakers = 'ponentes';
   static const String registrations = 'inscripciones';
   static const String attendance = 'asistencia';
+  static const String certificates = 'certificados';
 }
 
 /// Constantes de roles de usuario
@@ -17,7 +18,9 @@ class UserRoles {
   static const String teacher = 'docente';
   static const String speaker = 'ponente';
   
-  static List<String> get all => [admin, student, teacher, speaker];
+ static const String organizer = 'organizador';
+
+  static List<String> get all => [admin, student, teacher, speaker, organizer];
   
   static bool isValid(String role) => all.contains(role.toLowerCase());
 }
@@ -111,6 +114,9 @@ class ErrorMessages {
   static const String wrongPassword = 'Contraseña incorrecta.';
   static const String accountDisabled = 'Tu cuenta está desactivada.';
   static const String institutionalOnly = 'Solo se permiten correos institucionales @virtual.upt.pe';
+ static const String invalidDocument = 'Número de documento inválido.';
+  static const String invalidPhone = 'Número de celular inválido.';
+  static const String documentAlreadyInUse = 'Ya existe una cuenta registrada con este documento.';
 }
 
 /// Mensajes de éxito

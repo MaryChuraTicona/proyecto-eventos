@@ -88,6 +88,8 @@ if (sessionId == null) 'scope': 'event' else 'scope': 'session',
 
       final futures = snap.docs.map((d) async {
         final data = d.data();
+         final Timestamp? createdAt =
+            data['createdAt'] is Timestamp ? data['createdAt'] as Timestamp : null;
         final String eventId = (data['eventId'] ?? '').toString();
         final String? sessionId = (data['sessionId'] as String?);
 
@@ -95,7 +97,7 @@ if (sessionId == null) 'scope': 'event' else 'scope': 'session',
         final evDoc = await _db.collection('eventos').doc(eventId).get();
         final ev = evDoc.data() ?? {};
         final String eventName = (ev['nombre'] ?? '').toString();
-
+         String location = (ev['lugarGeneral'] ?? '').toString();
         // Defaults (si no hay sesión)
         String titulo = eventName.isNotEmpty ? eventName : 'Evento';
         String dia = '';
@@ -120,6 +122,12 @@ if (sessionId == null) 'scope': 'event' else 'scope': 'session',
               final ses = sesDoc.data() ?? {};
               titulo = (ses['titulo'] ?? titulo).toString();
               dia = (ses['dia'] ?? '').toString();
+              
+               final sessionLocation =
+                  (ses['lugar'] ?? ses['ambiente'] ?? '').toString();
+              if (sessionLocation.isNotEmpty) {
+                location = sessionLocation;
+              }
               if (ses['horaInicio'] is Timestamp) {
                 horaInicioTs = ses['horaInicio'] as Timestamp;
               }
@@ -145,12 +153,18 @@ if (sessionId == null) 'scope': 'event' else 'scope': 'session',
           horaInicio: horaInicioTs,
           horaFin: horaFinTs,
           attended: attended,
+          location: location,
+          createdAt: createdAt,
         );
       }).toList();
 
       final list = await Future.wait(futures);
       // Ordenar por fecha de inicio descendente
-      list.sort((a, b) => b.horaInicio.compareTo(a.horaInicio));
+     list.sort((a, b) {
+        final aTs = a.createdAt ?? a.horaInicio;
+        final bTs = b.createdAt ?? b.horaInicio;
+        return bTs.compareTo(aTs);
+      });
       return list;
     });
   }
@@ -193,6 +207,8 @@ class UserRegistrationView {
   final Timestamp horaInicio;
   final Timestamp horaFin;
   final bool attended;
+   final String location;
+  final Timestamp? createdAt;
 
   UserRegistrationView({
     required this.eventId,
@@ -203,6 +219,8 @@ class UserRegistrationView {
     required this.horaInicio,
     required this.horaFin,
     required this.attended,
+     required this.location,
+    required this.createdAt,
   });
 
   bool get finished => horaFin.toDate().isBefore(DateTime.now());

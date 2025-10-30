@@ -8,6 +8,39 @@ DateTime? _toDate(dynamic v) {
   return null;
 }
 
+class AdminEventOrganizer {
+  final String uid;
+  final String email;
+  final String displayName;
+  final String? phone;
+  final String? ciclo;
+
+  const AdminEventOrganizer({
+    required this.uid,
+    required this.email,
+    required this.displayName,
+    this.phone,
+    this.ciclo,
+  });
+
+  factory AdminEventOrganizer.fromMap(Map<String, dynamic> data) {
+    return AdminEventOrganizer(
+      uid: (data['uid'] ?? data['id'] ?? '').toString(),
+      email: (data['email'] ?? '').toString(),
+      displayName: (data['displayName'] ?? data['nombre'] ?? '').toString(),
+      phone: (data['phone'] ?? data['telefono'])?.toString(),
+      ciclo: (data['ciclo'] ?? data['cicloAcademico'])?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'uid': uid,
+        'email': email,
+        'displayName': displayName,
+        if (phone != null && phone!.isNotEmpty) 'phone': phone,
+        if (ciclo != null && ciclo!.isNotEmpty) 'ciclo': ciclo,
+      };
+}
 class AdminEventModel {
   final String id;
   final String nombre;
@@ -24,6 +57,7 @@ class AdminEventModel {
   final String createdBy;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final List<AdminEventOrganizer> organizers;
 
   AdminEventModel({
     required this.id,
@@ -41,10 +75,27 @@ class AdminEventModel {
     required this.createdBy,
     this.createdAt,
     this.updatedAt,
+    this.organizers = const [],
   });
 
+ List<String> get organizerIds => organizers.map((o) => o.uid).where((e) => e.isNotEmpty).toList();
   factory AdminEventModel.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? {};
+
+      final rawOrganizers = (d['organizers'] as List?) ?? const [];
+    final parsedOrganizers = rawOrganizers
+        .map((e) {
+          if (e is AdminEventOrganizer) return e;
+          if (e is Map<String, dynamic>) return AdminEventOrganizer.fromMap(e);
+          if (e is Map) {
+            return AdminEventOrganizer.fromMap(
+                e.map((key, value) => MapEntry(key.toString(), value)));
+          }
+          return null;
+        })
+        .whereType<AdminEventOrganizer>()
+        .where((e) => e.uid.isNotEmpty)
+        .toList();
     return AdminEventModel(
       id: doc.id,
       nombre: (d['nombre'] ?? '').toString(),
@@ -64,6 +115,7 @@ class AdminEventModel {
       createdBy: (d['createdBy'] ?? '').toString(),
       createdAt: _toDate(d['createdAt']),
       updatedAt: _toDate(d['updatedAt'] ?? d['updateAt']),
+    organizers: parsedOrganizers,
     );
   }
 
@@ -83,6 +135,8 @@ class AdminEventModel {
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         'updateAt': FieldValue.serverTimestamp(),
+        'organizers': organizers.map((e) => e.toMap()).toList(),
+        'organizerIds': organizerIds,
       };
 
   Map<String, dynamic> toMapForUpdate() => {
@@ -100,5 +154,7 @@ class AdminEventModel {
         'createdBy': createdBy,
         'updatedAt': FieldValue.serverTimestamp(),
         'updateAt': FieldValue.serverTimestamp(),
+          'organizers': organizers.map((e) => e.toMap()).toList(),
+        'organizerIds': organizerIds,
       };
 }

@@ -16,12 +16,13 @@ class SessionFormDialog extends StatefulWidget {
   final AdminSessionModel? existing;
   final String? preselectedEventId;
   final String? preselectedEventName;
-  
+  final bool allowEventChange;
   const SessionFormDialog({
     super.key,
     this.existing,
     this.preselectedEventId,
     this.preselectedEventName,
+    this.allowEventChange = true,
   });
 
   @override
@@ -327,7 +328,36 @@ class _SessionFormDialogState extends State<SessionFormDialog> {
             );
           }
         }
-        
+          if (!widget.allowEventChange && _eventoId != null) {
+          final selectedName = widget.preselectedEventName ??
+              allEvents.firstWhere(
+                (element) => element.id == _eventoId,
+                orElse: () => AdminEventModel(
+                  id: _eventoId!,
+                  nombre: widget.preselectedEventName ?? 'Evento',
+                  tipo: '',
+                  descripcion: '',
+                  fechaInicio: null,
+                  fechaFin: null,
+                  dias: const [],
+                  lugarGeneral: '',
+                  modalidadGeneral: '',
+                  aforoGeneral: 0,
+                  estado: '',
+                  requiereInscripcionPorSesion: true,
+                  createdBy: '',
+                ),
+              ).nombre;
+
+          return TextFormField(
+            readOnly: true,
+            initialValue: selectedName,
+            decoration: const InputDecoration(
+              labelText: 'Evento asignado',
+              border: OutlineInputBorder(),
+            ),
+          );
+        }
         return DropdownButtonFormField<String>(
           value: _eventoId,
           isExpanded: true,
