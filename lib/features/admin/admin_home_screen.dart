@@ -1,15 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
-
-import 'package:eventos/utils/csv_saver.dart';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/error_handler.dart';
 import '../../core/constants.dart';
+import 'utils/csv_downloader.dart';
 import 'forms/event_form.dart';
 import 'forms/session_form.dart';
 import 'forms/speaker_form.dart';
@@ -23,8 +20,6 @@ import 'services/admin_event_service.dart';
 import 'services/admin_session_service.dart';
 import 'services/admin_speaker_service.dart';
 import 'services/admin_seed_service.dart';
-import 'dart:html' as html;
-
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -2662,36 +2657,38 @@ class _ReportesTabState extends State<_ReportesTab> {
       }
       
       // Generar CSV
-final csvData = _generateCSV(users);
-
-// Descargar archivo CSV (multiplataforma)
-final bytes = Uint8List.fromList(utf8.encode('\uFEFF$csvData')); // UTF-8 con BOM
-final now = DateTime.now();
-final timestamp = '${now.year}'
-    '${now.month.toString().padLeft(2, '0')}'
-    '${now.day.toString().padLeft(2, '0')}_'
-    '${now.hour.toString().padLeft(2, '0')}'
-    '${now.minute.toString().padLeft(2, '0')}';
-final filename = 'usuarios_upt_$timestamp.csv';
-
-await saveCsv(bytes, filename);
-AppLogger.success('✅ CSV exportado: $filename (${users.length} usuarios)');
+      final csvData = _generateCSV(users);
+      
+      // Descargar archivo CSV
+     final didDownload = _downloadCSVFile(csvData, users.length);
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ Archivo CSV descargado con ${users.length} usuarios'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-            action: SnackBarAction(
-              label: 'Ver en consola',
-              textColor: Colors.white,
-              onPressed: () {
-                AppLogger.info(csvData);
-              },
+        
+         if (didDownload) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Archivo CSV descargado con ${users.length} usuarios'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+              action: SnackBarAction(
+                label: 'Ver en consola',
+                textColor: Colors.white,
+                onPressed: () {
+                  AppLogger.info(csvData);
+                },
+              ),
             ),
-          ),
-        );
+      
+   );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ La exportación a CSV solo está disponible en la versión web.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+
       }
     } catch (e) {
       if (mounted) {
@@ -2743,38 +2740,34 @@ AppLogger.success('✅ CSV exportado: $filename (${users.length} usuarios)');
     return buffer.toString();
   }
   
-  /// Descarga el archivo CSV en el navegador
- void _downloadCSVFile(String csvData, int userCount) {
+  /// Descarga el archivo CSV en el navegador. Retorna `true` si la descarga se
+  /// ejecutó (solo en web) o `false` si no está soportado en la plataforma actual.
+  bool _downloadCSVFile(String csvData, int userCount) {
     try {
       // Convertir CSV a bytes con codificación UTF-8 (con BOM para Excel)
       final bytes = utf8.encode('\uFEFF$csvData'); // BOM para que Excel reconozca UTF-8
       
-      // Crear blob
-      final blob = html.Blob([bytes], 'text/csv;charset=utf-8');
-      
-      // Crear URL del blob
-      final url = html.Url.createObjectUrlFromBlob(blob);
+     
+
       
       // Generar nombre de archivo con fecha
       final now = DateTime.now();
       final timestamp = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
       final filename = 'usuarios_upt_$timestamp.csv';
       
-      // Crear elemento <a> y simular click
-      final anchor = html.AnchorElement(href: url)
-        ..setAttribute('download', filename)
-        ..style.display = 'none';
       
-      html.document.body?.append(anchor);
-      anchor.click();
-      
-      // Limpiar
-      anchor.remove();
-      html.Url.revokeObjectUrl(url);
-      
-      AppLogger.success('✅ CSV descargado: $filename ($userCount usuarios)');
-    } catch (e) {
-      AppLogger.error('Error al descargar CSV: $e');
+  final success = downloadCsvBytes(bytes, filename: filename);
+
+      if (success) {
+        AppLogger.success('✅ CSV descargado: $filename ($userCount usuarios)');
+      } else {
+        AppLogger.warning('Descarga de CSV disponible solo en la versión web.');
+      }
+
+      return success;
+    } catch (e, stack) {
+      AppLogger.error('Error al descargar CSV', e, stack);
+
       rethrow;
     }
   }
