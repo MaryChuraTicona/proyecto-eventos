@@ -469,7 +469,8 @@ class _FacultyMetrics extends StatelessWidget {
           );
         }
 
-        final allDocs = snapshot.data?.docs ?? [];
+        final allDocs = snapshot.data?.docs ??
+            const <QueryDocumentSnapshot<Map<String, dynamic>>>[];
         
         // Filtrar solo estudiantes
         final students = allDocs.where((doc) {
@@ -506,21 +507,44 @@ class _FacultyMetrics extends StatelessWidget {
         
         // Contar estudiantes por facultad
         final Map<String, int> facultyCounts = {};
+         final Map<String, Map<String, int>> schoolCounts = {};
+        final Map<String, int> missingSchoolCounts = {};
         int withoutFaculty = 0;
         
         for (final doc in students) {
           final data = doc.data();
-          final faculty = data['faculty']?.toString();
           
-          if (faculty == null || faculty.isEmpty) {
+ final faculty = (data['faculty'] ?? '').toString().trim();
+          final school = (data['school'] ?? '').toString().trim();
+
+          if (faculty.isEmpty) {
             withoutFaculty++;
-          } else {
-            facultyCounts[faculty] = (facultyCounts[faculty] ?? 0) + 1;
+           continue;
           }
+
+          facultyCounts[faculty] = (facultyCounts[faculty] ?? 0) + 1;
+
+          if (school.isEmpty) {
+            missingSchoolCounts[faculty] = (missingSchoolCounts[faculty] ?? 0) + 1;
+            continue;
+          }
+
+          final map = schoolCounts.putIfAbsent(faculty, () => <String, int>{});
+          map[school] = (map[school] ?? 0) + 1;
         }
-        
         final total = students.length;
         
+         final facultyCodes = <String>[...Faculties.all];
+        if (facultyCounts.containsKey(Faculties.external) &&
+            !facultyCodes.contains(Faculties.external)) {
+          facultyCodes.add(Faculties.external);
+        }
+        for (final key in facultyCounts.keys) {
+          if (!facultyCodes.contains(key)) {
+            facultyCodes.add(key);
+          }
+        }
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -580,19 +604,22 @@ class _FacultyMetrics extends StatelessWidget {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: MediaQuery.of(context).size.width > 900 ? 3 : 
+                    crossAxisCount: MediaQuery.of(context).size.width > 900 ? 3 :
                                  MediaQuery.of(context).size.width > 600 ? 2 : 1,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
                   childAspectRatio: 3,
                 ),
-                itemCount: Faculties.all.length,
+               itemCount: facultyCodes.length,
                 itemBuilder: (context, index) {
-                  final facultyCode = Faculties.all[index];
+                  final facultyCode = facultyCodes[index];
                   final count = facultyCounts[facultyCode] ?? 0;
                   final percentage = total > 0 ? (count / total * 100).toStringAsFixed(1) : '0.0';
                   final facultyName = Faculties.getFullName(facultyCode);
-                  
+                   final schools = schoolCounts[facultyCode] ?? const {};
+                  final missingSchools = missingSchoolCounts[facultyCode] ?? 0;
+                  final sortedSchools = schools.entries.toList()
+                    ..sort((a, b) => b.value.compareTo(a.value));
                   return Card(
                     elevation: 0,
                     color: count > 0 
@@ -608,67 +635,123 @@ class _FacultyMetrics extends StatelessWidget {
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(12),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: _getFacultyColor(facultyCode).withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              _getFacultyIcon(facultyCode),
-                              color: _getFacultyColor(facultyCode),
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  facultyCode,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).colorScheme.onSurface,
-                                  ),
-                                ),
-                                Text(
-                                  facultyName,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                         
+
+                         Row(
                             children: [
-                              Text(
-                                '$count',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
+                              
+                                Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: _getFacultyColor(facultyCode).withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  _getFacultyIcon(facultyCode),
                                   color: _getFacultyColor(facultyCode),
+                                  size: 20,
                                 ),
                               ),
-                              Text(
-                                '$percentage%',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+
+                                   const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      facultyCode,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: Theme.of(context).colorScheme.onSurface,
+                                      ),
+                                    ),
+                                    Text(
+                                      facultyName,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
+                              ),
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    '$count',
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: _getFacultyColor(facultyCode),
+                                    ),
+                                  ),
+                                  Text(
+                                    '$percentage%',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
+                          if (sortedSchools.isNotEmpty || missingSchools > 0) ...[
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              children: [
+                                for (final entry in sortedSchools.take(5))
+                                  Chip(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                                    backgroundColor:
+                                        _getFacultyColor(facultyCode).withOpacity(0.1),
+                                    label: Text(
+                                      '${_schoolLabel(facultyCode, entry.key)} (${entry.value})',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: _getFacultyColor(facultyCode).withOpacity(0.9),
+                                      ),
+                                    ),
+                                  ),
+                                if (sortedSchools.length > 5)
+                                  Chip(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                                    backgroundColor:
+                                        Theme.of(context).colorScheme.surfaceVariant,
+                                    label: Text(
+                                      '+${sortedSchools.length - 5} escuelas',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ),
+                                if (missingSchools > 0)
+                                  Chip(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                                    backgroundColor: Colors.orange.withOpacity(0.15),
+                                    label: Text(
+                                      'Sin escuela: $missingSchools',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.orange.shade800,
+                                             ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -680,7 +763,6 @@ class _FacultyMetrics extends StatelessWidget {
       },
     );
   }
-  
   Color _getFacultyColor(String code) {
     switch (code) {
       case Faculties.faing:
@@ -695,6 +777,8 @@ class _FacultyMetrics extends StatelessWidget {
         return const Color(0xFFF59E0B); // Amber
       case Faculties.fau:
         return const Color(0xFF06B6D4); // Cyan
+      case Faculties.external:
+        return Colors.grey;
       default:
         return Colors.grey;
     }
@@ -714,9 +798,16 @@ class _FacultyMetrics extends StatelessWidget {
         return Icons.menu_book_rounded;
       case Faculties.fau:
         return Icons.architecture_rounded;
+         case Faculties.external:
+        return Icons.public_rounded;
       default:
         return Icons.school_rounded;
     }
+  }
+
+  String _schoolLabel(String faculty, String schoolCode) {
+    if (faculty == Faculties.external) return schoolCode;
+    return Schools.getName(faculty, schoolCode);
   }
 }
 
@@ -928,35 +1019,70 @@ if (event.dias.isNotEmpty) ...[
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              children: [
-                FilledButton.icon(
-                  onPressed: () => showDialog(
-                    context: context,
-                    builder: (_) => SessionFormDialog(
-                      preselectedEventId: event.id,
-                      preselectedEventName: event.nombre,
-                    ),
-                  ),
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Nueva ponencia'),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: () => showDialog(
-                    context: context,
-                    builder: (_) => EventFormDialog(existing: event),
-                  ),
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Editar evento'),
-                ),
-                const Spacer(),
-                IconButton(
-                  tooltip: 'Eliminar evento',
-                  onPressed: () => _confirmDelete(context),
-                  icon: const Icon(Icons.delete_outline_rounded),
-                ),
-              ],
+           
+
+           child: LayoutBuilder(
+              builder: (context, constraints) {
+                Widget buildNewSessionButton() => FilledButton.icon(
+                      onPressed: () => showDialog(
+                        context: context,
+                        builder: (_) => SessionFormDialog(
+                          preselectedEventId: event.id,
+                          preselectedEventName: event.nombre,
+                        ),
+                      ),
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Nueva ponencia'),
+                    );
+
+                Widget buildEditButton() => OutlinedButton.icon(
+                      onPressed: () => showDialog(
+                        context: context,
+                        builder: (_) => EventFormDialog(existing: event),
+                      ),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Editar evento'),
+                    );
+
+                Widget buildDeleteButton() => IconButton(
+                      tooltip: 'Eliminar evento',
+                      onPressed: () => _confirmDelete(context),
+                      icon: const Icon(Icons.delete_outline_rounded),
+                    );
+
+                final isCompact = constraints.maxWidth < 520;
+
+                if (isCompact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: buildNewSessionButton(),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: buildEditButton(),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: buildDeleteButton(),
+                      ),
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    buildNewSessionButton(),
+                    const SizedBox(width: 12),
+                    buildEditButton(),
+                    const Spacer(),
+                    buildDeleteButton(),
+                  ],
+                );
+              },
             ),
           ),
           const SizedBox(height: 12),
@@ -1563,6 +1689,7 @@ class _UsuariosTabState extends State<_UsuariosTab> {
                     DropdownMenuItem(value: 'estudiante', child: Text('Estudiantes', overflow: TextOverflow.ellipsis)),
                     DropdownMenuItem(value: 'docente', child: Text('Docentes', overflow: TextOverflow.ellipsis)),
                     DropdownMenuItem(value: 'ponente', child: Text('Ponentes', overflow: TextOverflow.ellipsis)),
+                 DropdownMenuItem(value: 'organizador', child: Text('Organizadores', overflow: TextOverflow.ellipsis)),
                   ],
                   onChanged: (v) => setState(() => _filtroRol = v),
                   decoration: const InputDecoration(
@@ -1583,10 +1710,11 @@ class _UsuariosTabState extends State<_UsuariosTab> {
                   isExpanded: true,
                   items: [
                     const DropdownMenuItem(value: null, child: Text('Todas', overflow: TextOverflow.ellipsis)),
-                    ...Faculties.all.map((code) => DropdownMenuItem(
-                      value: code,
-                      child: Text(code, overflow: TextOverflow.ellipsis),
-                    )),
+                    
+                     ...Faculties.allWithExternal.map((code) => DropdownMenuItem(
+                    value: code,
+                    child: Text(code, overflow: TextOverflow.ellipsis),
+                  )),
                   ],
                   onChanged: (v) => setState(() => _filtroFacultad = v),
                   decoration: const InputDecoration(
@@ -1623,6 +1751,7 @@ class _UsuariosTabState extends State<_UsuariosTab> {
                   if (rol == 'student') normalizedRole = 'estudiante';
                   if (rol == 'teacher') normalizedRole = 'docente';
                   if (rol == 'speaker') normalizedRole = 'ponente';
+                    if (rol == 'organizer') normalizedRole = 'organizador';
                   
                   return normalizedRole == _filtroRol;
                 }).toList();
