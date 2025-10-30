@@ -870,7 +870,7 @@ class _EventCard extends StatelessWidget {
   final ColorScheme cs;
   final AdminEventService eventSvc;
   final AdminSessionService sesSvc;
-  final RegistrationService regSvc;
+    final RegistrationService regSvc;
 
   const _EventCard({
     required this.event,
@@ -1091,7 +1091,7 @@ if (event.dias.isNotEmpty) ...[
             ),
           ),
           const SizedBox(height: 12),
-           Padding(
+          Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
             child: _EventRegistrationsSection(
               event: event,
@@ -1367,19 +1367,15 @@ class _EventRegistrationsSection extends StatelessWidget {
               itemBuilder: (context, index) {
                 final reg = students[index];
                 final user = reg.user;
-                final displayName = user?.displayName?.trim();
-                final email = user?.email.trim();
-                final fallbackName = (displayName != null && displayName.isNotEmpty)
-                    ? displayName
-                    : (email != null && email.isNotEmpty)
-                        ? email
-                        : reg.uid;
-                final initials = fallbackName.trim().isNotEmpty
-                    ? fallbackName.trim().substring(0, 1).toUpperCase()
+                final resolvedName = _resolveStudentName(reg);
+                final email = _resolveStudentEmail(reg);
+                final identifier = (resolvedName ?? email ?? reg.uid).trim();
+                final initials = identifier.isNotEmpty
+                    ? identifier.substring(0, 1).toUpperCase()
                     : '?';
 
                 final subtitleParts = <String>[];
-                if (email != null && email.isNotEmpty && email != fallbackName) {
+                if (email != null && email.isNotEmpty && email.toLowerCase() != identifier.toLowerCase()) {
                   subtitleParts.add(email);
                 }
                 final faculty = user?.faculty?.trim();
@@ -1408,7 +1404,7 @@ class _EventRegistrationsSection extends StatelessWidget {
                     child: Text(initials),
                   ),
                   title: Text(
-                    fallbackName,
+                    identifier,
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   subtitle: subtitle.isNotEmpty ? Text(subtitle) : null,
@@ -1428,8 +1424,54 @@ class _EventRegistrationsSection extends StatelessWidget {
     final mi = dt.minute.toString().padLeft(2, '0');
     return '$dd/$mm/${dt.year} $hh:$mi';
   }
-}
 
+  String? _resolveStudentName(EventRegistrationInfo reg) {
+    String? _nonEmpty(dynamic value) {
+      if (value == null) return null;
+      final text = value.toString().trim();
+      return text.isEmpty ? null : text;
+    }
+
+    final user = reg.user;
+    final fromUser = _nonEmpty(user?.displayName);
+    if (fromUser != null) return fromUser;
+
+    final fromParts = [
+      _nonEmpty(user?.firstName),
+      _nonEmpty(user?.lastName),
+    ].whereType<String>();
+    final joinedParts = fromParts.join(' ').trim();
+    if (joinedParts.isNotEmpty) return joinedParts;
+
+    final answerFirst = _nonEmpty(reg.answers['nombres'] ?? reg.answers['nombre']);
+    final answerLast = _nonEmpty(reg.answers['apellidos'] ?? reg.answers['apellido']);
+    final answerCombined = [answerFirst, answerLast]
+        .whereType<String>()
+        .join(' ')
+        .trim();
+    if (answerCombined.isNotEmpty) return answerCombined;
+
+    final answerFull = _nonEmpty(
+      reg.answers['nombreCompleto'] ??
+          reg.answers['fullName'] ??
+          reg.answers['displayName'],
+    );
+    return answerFull;
+  }
+
+  String? _resolveStudentEmail(EventRegistrationInfo reg) {
+    String? _nonEmpty(dynamic value) {
+      if (value == null) return null;
+      final text = value.toString().trim();
+      return text.isEmpty ? null : text;
+    }
+
+    final userEmail = _nonEmpty(reg.user?.email);
+    if (userEmail != null) return userEmail;
+
+    return _nonEmpty(reg.answers['email'] ?? reg.answers['correo']);
+  }
+}
 class _SectionPlaceholder extends StatelessWidget {
   final IconData icon;
   final String message;

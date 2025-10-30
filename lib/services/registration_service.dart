@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/error_handler.dart';
 import '../models/app_user.dart';
+import '../models/app_user.dart';
 import 'attendance_service.dart';
 
 class RegistrationService {
@@ -20,6 +21,9 @@ class RegistrationService {
         .where('uid', isEqualTo: uid)
         .snapshots();
   }
+
+
+  
  /// Stream de estudiantes inscritos en un evento (registro general o por sesión).
   Stream<List<EventRegistrationInfo>> watchEventRegistrations(String eventId) {
     return _db
@@ -117,6 +121,7 @@ class RegistrationService {
       return list;
     });
   }
+
   String _docId(String eventId, String uid, [String? sessionId]) {
     // Sin sesión:   evento_uid
     // Con sesión:   evento_sesion_uid
@@ -328,6 +333,7 @@ class UserSessionStatus {
   final bool attended;
   const UserSessionStatus({required this.registered, required this.attended});
 }
+
 class EventRegistrationInfo {
   final String uid;
   final AppUser? user;

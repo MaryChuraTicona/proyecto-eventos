@@ -6,6 +6,8 @@ class AppUser {
   final String uid;
   final String email;
   final String? displayName;
+   final String? firstName;
+  final String? lastName;
   final String? role;
   final bool active;
   final bool? isInstitutional;
@@ -18,6 +20,8 @@ class AppUser {
     required this.uid,
     required this.email,
     this.displayName,
+    this.firstName,
+    this.lastName,
     this.role,
     this.active = true,
     this.isInstitutional,
@@ -30,10 +34,28 @@ class AppUser {
   /// Crea un objeto [AppUser] desde un documento de Firestore.
   factory AppUser.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? {};
+     String? _trimmedString(dynamic value) {
+      if (value == null) return null;
+      final text = value.toString().trim();
+      return text.isEmpty ? null : text;
+    }
+
+    final rawDisplayName = _trimmedString(d['displayName']);
+    final firstName = _trimmedString(d['nombres']);
+    final lastName = _trimmedString(d['apellidos']);
+    final combinedName = [firstName, lastName]
+        .where((part) => part != null && part!.isNotEmpty)
+        .map((part) => part!)
+        .join(' ')
+        .trim();
+    final resolvedDisplayName =
+        _trimmedString(rawDisplayName) ?? _trimmedString(combinedName);
     return AppUser(
       uid: doc.id,
       email: (d['email'] ?? '').toString(),
-      displayName: d['displayName'] as String?,
+      displayName: resolvedDisplayName,
+      firstName: firstName,
+      lastName: lastName,
       role: (d['role'] ?? d['rol'] ?? 'estudiante').toString(),
       active: (d['active'] ?? true) as bool,
       isInstitutional: d['isInstitutional'] as bool?,
@@ -49,6 +71,8 @@ class AppUser {
     return {
       'email': email,
       'displayName': displayName,
+        'nombres': firstName,
+      'apellidos': lastName,
       'role': role ?? 'estudiante',
       'active': active,
       'isInstitutional': isInstitutional,
