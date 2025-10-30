@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:name="foreground"
+        android:translateX="18"
+        android:translateY="18"
+        android:scaleX="0.75"
+        android:scaleY="0.75">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M12,18h48v8H12z"/>
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M12,34h48v8H12z"/>
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M12,50h48v8H12z"/>
+    </group>
+</vector>
