@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "277557539813-soejs0ebb1hkseb4pt7jdkaqbfcgqg0o.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.episeventos",
+            "certificate_hash": "0e1980175002472076c7a5bde6ccefb2f6ac6eaa"
+          }
+        },
+        {
           "client_id": "277557539813-t1152qgpenvjjnlf8voggi5hofik3lsr.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -49,6 +57,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "277557539813-d0c48gsk88gtd01hs55ghlkdui94ikji.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.eventos",
+            "certificate_hash": "0e1980175002472076c7a5bde6ccefb2f6ac6eaa"
+          }
+        },
         {
           "client_id": "277557539813-t1152qgpenvjjnlf8voggi5hofik3lsr.apps.googleusercontent.com",
           "client_type": 3
