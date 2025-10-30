@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+import 'dart:typed_data';
+
+import 'package:eventos/utils/csv_saver.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +23,8 @@ import 'services/admin_event_service.dart';
 import 'services/admin_session_service.dart';
 import 'services/admin_speaker_service.dart';
 import 'services/admin_seed_service.dart';
+import 'dart:html' as html;
+
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -2659,10 +2662,20 @@ class _ReportesTabState extends State<_ReportesTab> {
       }
       
       // Generar CSV
-      final csvData = _generateCSV(users);
-      
-      // Descargar archivo CSV
-      _downloadCSVFile(csvData, users.length);
+final csvData = _generateCSV(users);
+
+// Descargar archivo CSV (multiplataforma)
+final bytes = Uint8List.fromList(utf8.encode('\uFEFF$csvData')); // UTF-8 con BOM
+final now = DateTime.now();
+final timestamp = '${now.year}'
+    '${now.month.toString().padLeft(2, '0')}'
+    '${now.day.toString().padLeft(2, '0')}_'
+    '${now.hour.toString().padLeft(2, '0')}'
+    '${now.minute.toString().padLeft(2, '0')}';
+final filename = 'usuarios_upt_$timestamp.csv';
+
+await saveCsv(bytes, filename);
+AppLogger.success('✅ CSV exportado: $filename (${users.length} usuarios)');
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2731,7 +2744,7 @@ class _ReportesTabState extends State<_ReportesTab> {
   }
   
   /// Descarga el archivo CSV en el navegador
-  void _downloadCSVFile(String csvData, int userCount) {
+ void _downloadCSVFile(String csvData, int userCount) {
     try {
       // Convertir CSV a bytes con codificación UTF-8 (con BOM para Excel)
       final bytes = utf8.encode('\uFEFF$csvData'); // BOM para que Excel reconozca UTF-8
