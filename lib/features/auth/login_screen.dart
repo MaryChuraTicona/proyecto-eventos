@@ -2,11 +2,10 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// Usa tu router real
-import '../../app/router_by_rol.dart';
 
 bool _esInstitucional(String email) {
   final e = email.trim().toLowerCase();
@@ -27,6 +26,14 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscure = true;
   bool _loading = false;
   bool _modoInstitucional = true;
+   @override
+  void initState() {
+    super.initState();
+    if (kIsWeb) {
+      Future.microtask(_consumeRedirectResult);
+    }
+  }
+
 
   @override
   void dispose() {
@@ -40,6 +47,33 @@ class _LoginScreenState extends State<LoginScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(m), behavior: SnackBarBehavior.floating),
     );
+  }
+
+   Future<void> _consumeRedirectResult() async {
+    if (!kIsWeb) return;
+    try {
+      final result = await FirebaseAuth.instance.getRedirectResult();
+      final user = result.user;
+      if (user == null) return;
+
+      if (mounted) setState(() => _loading = true);
+      final email = user.email?.toLowerCase() ?? '';
+      if (!_esInstitucional(email)) {
+        await FirebaseAuth.instance.signOut();
+        _snack('Solo correos institucionales @virtual.upt.pe');
+        return;
+      }
+
+      await _ensureUserDocAndGuard(user);
+    } on FirebaseAuthException catch (e) {
+      _snack('Google: ${e.code}');
+    } catch (e, st) {
+      final msg = (e is AsyncError) ? '${e.error}' : e.toString();
+      debugPrint('consumeRedirectResult error: $msg\n$st');
+      _snack('Error inesperado: $msg');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   /// Crea/actualiza doc en `usuarios/{uid}` y lo marca activo
@@ -218,31 +252,15 @@ class _LoginScreenState extends State<LoginScreen> {
   // ------------------ GOOGLE SIGN-IN ------------------
   Future<void> _googleSignIn() async {
     setState(() => _loading = true);
+     var redirected = false;
     try {
       final provider = GoogleAuthProvider();
 
       if (kIsWeb) {
-        try {
-          final cred = await FirebaseAuth.instance.signInWithPopup(provider);
-          final email = cred.user?.email?.toLowerCase() ?? '';
-          if (_modoInstitucional && !_esInstitucional(email)) {
-            await FirebaseAuth.instance.signOut();
-            _snack('Solo correos institucionales @virtual.upt.pe');
-            return;
-          }
-          await _ensureUserDocAndGuard(cred.user!);
-          // El AuthWrapper detectará el cambio automáticamente
-        } on FirebaseAuthException catch (e) {
-          if (e.code == 'popup-blocked' ||
-              e.code == 'popup-closed-by-user' ||
-              e.code == 'unauthorized-domain') {
-            _snack('El navegador bloqueó el popup o el dominio no está autorizado. Probando redirección…');
-            await FirebaseAuth.instance.signInWithRedirect(provider);
-            return;
-          } else {
-            _snack('Google: ${e.code}');
-          }
-        }
+        
+        redirected = true;
+        await FirebaseAuth.instance.signInWithRedirect(provider);
+        return;
       } else {
         final cred = await FirebaseAuth.instance.signInWithProvider(provider);
         final email = cred.user?.email?.toLowerCase() ?? '';
@@ -261,7 +279,7 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint('GoogleSignIn error: $msg\n$st');
       _snack('Error inesperado: $msg');
     } finally {
-      if (mounted) setState(() => _loading = false);
+       if (!redirected && mounted) setState(() => _loading = false);
     }
   }
 
@@ -278,26 +296,35 @@ class _LoginScreenState extends State<LoginScreen> {
           SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final isWide = constraints.maxWidth > 720;
-                final horizontalPadding = isWide ? 56.0 : 24.0;
-
+                final isWide = constraints.maxWidth >= 720;
+                final isCompact = constraints.maxWidth < 520;
+                final horizontalPadding = isWide
+                    ? 56.0
+                    : (isCompact ? 20.0 : 32.0);
+                final topPadding = isWide
+                    ? 48.0
+                    : (constraints.maxHeight < 700 ? 24.0 : 32.0);
+                final bottomPadding = isWide ? 48.0 : 32.0;
+                final maxCardWidth = isWide
+                    ? 560.0
+                    : (isCompact ? 420.0 : 480.0);
                 return Align(
                   alignment: isWide ? Alignment.center : Alignment.topCenter,
                   child: SingleChildScrollView(
                     padding: EdgeInsets.fromLTRB(
                       horizontalPadding,
-                      isWide ? 48 : 32,
+                       topPadding,
                       horizontalPadding,
-                      32,
+                      bottomPadding,
                     ),
                     child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: isWide ? 560 : 460),
+                       constraints: BoxConstraints(maxWidth: maxCardWidth),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          _buildWelcomeHeader(cs),
-                          const SizedBox(height: 18),
-                          _buildCard(context, cs),
+                         _buildWelcomeHeader(cs, compact: isCompact),
+                          SizedBox(height: isCompact ? 16 : 18),
+                          _buildCard(context, cs, compact: isCompact),
                         ],
                       ),
                     ),
@@ -311,7 +338,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildCard(BuildContext context, ColorScheme cs) {
+   Widget _buildCard(BuildContext context, ColorScheme cs, {required bool compact}) {
     final borderRadius = BorderRadius.circular(28);
 
     return DecoratedBox(
@@ -346,7 +373,12 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(26, 30, 26, 22),
+               padding: EdgeInsets.fromLTRB(
+                  compact ? 20 : 26,
+                  compact ? 24 : 30,
+                  compact ? 20 : 26,
+                  compact ? 18 : 22,
+                ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -360,41 +392,42 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   children: [
                     SizedBox(
-                      height: 60,
+                        height: compact ? 52 : 60,
                       child: Image.asset(
                         'assets/images/logo_horizontal.png',
                         fit: BoxFit.contain,
                         errorBuilder: (_, __, ___) => Icon(
                           Icons.event_available_rounded,
                           color: cs.onPrimary,
-                          size: 60,
+                          size: compact ? 48 : 60,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 18),
+                     SizedBox(height: compact ? 14 : 18),
                     Text(
                       'EVENTOS EPIS – UPT',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             color: cs.onPrimary,
-                            fontSize: 24,
+                             fontSize: compact ? 20 : 24,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.4,
                           ),
                     ),
-                    const SizedBox(height: 6),
+                       SizedBox(height: compact ? 4 : 6),
                     Text(
                       'Gestión integral de eventos académicos, talleres y ponencias.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: cs.onPrimary.withOpacity(0.86),
+                          fontSize: compact ? 13 : null,
                           ),
                     ),
-                    const SizedBox(height: 14),
+                     SizedBox(height: compact ? 10 : 14),
                     Wrap(
                       alignment: WrapAlignment.center,
-                      spacing: 12,
-                      runSpacing: 10,
+                     spacing: compact ? 8 : 12,
+                      runSpacing: compact ? 8 : 10,
                       children: const [
                         _LoginPill(
                           icon: Icons.dashboard_customize_rounded,
@@ -414,13 +447,23 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(26, 26, 26, 10),
+                 padding: EdgeInsets.fromLTRB(
+                  compact ? 20 : 26,
+                  compact ? 22 : 26,
+                  compact ? 20 : 26,
+                  compact ? 8 : 10,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     SegmentedButton<bool>(
                       style: ButtonStyle(
                         visualDensity: VisualDensity.standard,
+                        padding: MaterialStateProperty.all(
+                          EdgeInsets.symmetric(
+                            horizontal: compact ? 10 : 16,
+                          ),
+                        ),
                         backgroundColor: MaterialStateProperty.resolveWith(
                           (states) => states.contains(MaterialState.selected)
                               ? cs.primary.withOpacity(0.12)
@@ -461,11 +504,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 16),
                     Form(
                       key: _formKey,
-                      child: Column(
-                        children: [
-                          TextFormField(
+                       child: AutofillGroup(
+                        child: Column(
+                          children: [
+                            TextFormField(
                             controller: _emailCtrl,
                             keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            autofillHints: const [AutofillHints.email],
+                            onFieldSubmitted: (_) =>
+                                FocusScope.of(context).nextFocus(),
                             decoration: InputDecoration(
                               labelText: 'Correo electrónico',
                               hintText: _modoInstitucional
@@ -488,6 +536,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           TextFormField(
                             controller: _passCtrl,
                             obscureText: _obscure,
+                             textInputAction: TextInputAction.done,
+                            autofillHints: const [AutofillHints.password],
+                            onFieldSubmitted: (_) {
+                              if (!_loading) _loginEmail();
+                            },
                             decoration: InputDecoration(
                               labelText: 'Contraseña',
                               prefixIcon: const Icon(Icons.lock_outline),
@@ -500,19 +553,45 @@ class _LoginScreenState extends State<LoginScreen> {
                             validator: (v) => (v ?? '').length < 6 ? 'Mínimo 6 caracteres' : null,
                           ),
                           const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              TextButton(
-                                onPressed: _loading ? null : _reset,
-                                child: const Text('¿Olvidaste tu contraseña?'),
-                              ),
-                              const Spacer(),
-                              TextButton(
-                                onPressed: _loading ? null : () => _showRegisterDialog(_emailCtrl.text.trim()),
-                                child: const Text('Crear cuenta'),
-                              ),
-                            ],
-                          ),
+                          compact
+                              ? Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    TextButton(
+                                      style: TextButton.styleFrom(
+                                        alignment: Alignment.centerLeft,
+                                      ),
+                                      onPressed: _loading ? null : _reset,
+                                      child: const Text('¿Olvidaste tu contraseña?'),
+                                    ),
+                                    TextButton(
+                                      style: TextButton.styleFrom(
+                                        alignment: Alignment.centerLeft,
+                                      ),
+                                      onPressed: _loading
+                                          ? null
+                                          : () => _showRegisterDialog(_emailCtrl.text.trim()),
+                                      child: const Text('Crear cuenta'),
+                                    ),
+                                  ],
+                                )
+                              : Row(
+                                  children: [
+                                    TextButton(
+                                      onPressed: _loading ? null : _reset,
+                                      child: const Text('¿Olvidaste tu contraseña?'),
+                                    ),
+                                    const Spacer(),
+                                    TextButton(
+                                      onPressed: _loading
+                                          ? null
+                                          : () => _showRegisterDialog(_emailCtrl.text.trim()),
+                                      child: const Text('Crear cuenta'),
+                                    ),
+                                  ],
+                                ),
+
+
                           const SizedBox(height: 12),
                           SizedBox(
                             width: double.infinity,
@@ -540,11 +619,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ],
+
+
                 ),
               ),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(26, 18, 26, 26),
+                padding: EdgeInsets.fromLTRB(
+                  compact ? 20 : 26,
+                  compact ? 16 : 18,
+                  compact ? 20 : 26,
+                  compact ? 20 : 26,
+                ),
                 decoration: BoxDecoration(
                   color: cs.primary.withOpacity(0.1),
                 ),
@@ -586,12 +672,15 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildWelcomeHeader(ColorScheme cs) {
+  Widget _buildWelcomeHeader(ColorScheme cs, {required bool compact}) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding: EdgeInsets.symmetric(
+            horizontal: compact ? 12 : 16,
+            vertical: 6,
+          ),
           decoration: BoxDecoration(
             color: cs.primary.withOpacity(0.1),
             borderRadius: BorderRadius.circular(24),
@@ -605,13 +694,13 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 14),
+         SizedBox(height: compact ? 10 : 14),
         Text(
           'Participa, organiza y gestiona los eventos académicos de la EPIS',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: cs.onSurface,
-            fontSize: 18,
+             fontSize: compact ? 16 : 18,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -623,7 +712,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final emailCtrl = TextEditingController(text: hintEmail);
     final pass1Ctrl = TextEditingController();
     final pass2Ctrl = TextEditingController();
-     final nameCtrl = TextEditingController();
+    final nameCtrl = TextEditingController();
     final lastNameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     final docCtrl = TextEditingController();
@@ -631,113 +720,187 @@ class _LoginScreenState extends State<LoginScreen> {
 
     await showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Crear cuenta (externo)'),
-       
-content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: emailCtrl,
-                    decoration: const InputDecoration(labelText: 'Correo electrónico'),
-                    validator: (v) {
-                      final email = (v ?? '').trim();
-                      final re = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
-                      if (email.isEmpty) return 'Ingresa tu correo';
-                      if (!re.hasMatch(email)) return 'Correo inválido';
-                      if (_esInstitucional(email)) return 'Para institucional usa Google';
-                      return null;
-                    },
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: nameCtrl,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(labelText: 'Nombres'),
-                    validator: (v) => (v ?? '').trim().isEmpty ? 'Ingresa tus nombres' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: lastNameCtrl,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(labelText: 'Apellidos'),
-                    validator: (v) => (v ?? '').trim().isEmpty ? 'Ingresa tus apellidos' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: phoneCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Celular de contacto',
-                      helperText: 'Usado para coordinar recordatorios del evento',
+      builder: (dialogContext) {
+        final media = MediaQuery.of(dialogContext);
+        final isCompact = media.size.width < 520;
+        final rawMaxWidth = isCompact ? media.size.width - 48 : 420.0;
+        final constrainedWidth = rawMaxWidth < 280
+            ? 280.0
+            : (rawMaxWidth > 520.0 ? 520.0 : rawMaxWidth);
+
+        return AlertDialog(
+          title: const Text('Crear cuenta (externo)'),
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: isCompact ? 12 : 24,
+            vertical: isCompact ? 16 : 24,
+          ),
+          scrollable: true,
+          content: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: constrainedWidth),
+            child: AutofillGroup(
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: emailCtrl,
+                      decoration: const InputDecoration(labelText: 'Correo electrónico'),
+                      validator: (v) {
+                        final email = (v ?? '').trim();
+                        if (email.isEmpty) return 'Ingresa tu correo';
+                        if (!email.contains('@') || email.startsWith('@') || email.endsWith('@')) {
+                          return 'Correo inválido';
+                        }
+                        final parts = email.split('@');
+                        if (parts.length != 2 || !parts[1].contains('.')) {
+                          return 'Correo inválido';
+                        }
+                        if (_esInstitucional(email)) return 'Para institucional usa Google';
+                        return null;
+                      },
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.email],
+
+
+    ),
+
+
+                     const SizedBox(height: 12),
+                    TextFormField(
+                      controller: nameCtrl,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(labelText: 'Nombres'),
+                      validator: (v) => (v ?? '').trim().isEmpty ? 'Ingresa tus nombres' : null,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.givenName],
+
                     ),
-                    keyboardType: TextInputType.phone,
-                    validator: (v) {
-                      final value = (v ?? '').trim();
-                      if (value.isEmpty) return 'Ingresa tu número de contacto';
-                      if (value.length < 6) return 'Número muy corto';
-                      return null;
-                    },
-                  ),
+                  
                   const SizedBox(height: 12),
-                  TextFormField(
-                    controller: docCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Documento / Código (opcional)',
+                    TextFormField(
+                      controller: lastNameCtrl,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(labelText: 'Apellidos'),
+                      validator: (v) => (v ?? '').trim().isEmpty ? 'Ingresa tus apellidos' : null,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.familyName],
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: pass1Ctrl,
-                    obscureText: true,
-                    decoration: const InputDecoration(labelText: 'Contraseña (min 6)'),
-                    validator: (v) => (v ?? '').length < 6 ? 'Mínimo 6' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: pass2Ctrl,
-                    obscureText: true,
-                    decoration: const InputDecoration(labelText: 'Repite contraseña'),
-                    validator: (v) => v != pass1Ctrl.text ? 'No coincide' : null,
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: phoneCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Celular de contacto',
+                        hintText: '9XXXXXXXX',
+                      ),
+                      validator: (v) {
+                        final value = (v ?? '').trim();
+                        if (value.isEmpty) return null;
+                        final isNumeric = value.runes.every((r) => r >= 48 && r <= 57);
+                        if (!isNumeric || value.length != 9 || !value.startsWith('9')) {
+                          return 'Debe ser un número peruano válido';
+                        }
+                        return null;
+                      },
+                      keyboardType: TextInputType.phone,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.telephoneNumber],
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: docCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Documento de identidad (opcional)',
+                        hintText: 'DNI o CE',
+                      ),
+                      validator: (v) {
+                        final value = (v ?? '').trim();
+                        if (value.isEmpty) return null;
+                        final isNumeric = value.runes.every((r) => r >= 48 && r <= 57);
+                        if (!isNumeric) return 'Usa solo números';
+                        final length = value.length;
+                        final isDni = length == 8;
+                        final isCe = length >= 9 && length <= 12;
+                        if (!isDni && !isCe) {
+                          return 'Ingresa un DNI (8) o CE válido';
+                        }
+                        return null;
+                      },
+                      textInputAction: TextInputAction.next,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: pass1Ctrl,
+                      obscureText: true,
+                      decoration: const InputDecoration(labelText: 'Contraseña (mínimo 6 caracteres)'),
+                      validator: (v) => (v ?? '').length < 6 ? 'Mínimo 6 caracteres' : null,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.newPassword],
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: pass2Ctrl,
+                      obscureText: true,
+                      decoration: const InputDecoration(labelText: 'Confirmar contraseña'),
+                      validator: (v) => v != pass1Ctrl.text ? 'Las contraseñas no coinciden' : null,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) {
+                        if (formKey.currentState!.validate()) {
+                          Navigator.of(dialogContext).pop();
+                          unawaited(_registerEmail(
+                            emailCtrl.text.trim(),
+                            pass1Ctrl.text,
+                            {
+                              'nombres': nameCtrl.text.trim(),
+                              'apellidos': lastNameCtrl.text.trim(),
+                              'telefono': phoneCtrl.text.trim(),
+                              'documento': docCtrl.text.trim(),
+                            },
+                          ));
+                        }
+                      },
+                      autofillHints: const [AutofillHints.newPassword],
+                    ),
+                  ],
                 ),
-
-
 
               ),
             
+            ),
           ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-          FilledButton(
-            onPressed: () async {
-              if (!formKey.currentState!.validate()) return;
-              Navigator.pop(context);
-             await _registerEmail(
-                emailCtrl.text.trim(),
-                pass1Ctrl.text,
-                {
-                  'nombres': nameCtrl.text.trim(),
-                  'apellidos': lastNameCtrl.text.trim(),
-                  'telefono': phoneCtrl.text.trim(),
-                  'documento': docCtrl.text.trim(),
-                },
-              );
-            },
-            child: const Text('Crear'),
-          ),
-        ],
-      ),
+       
+ actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) return;
+                Navigator.of(dialogContext).pop();
+                await _registerEmail(
+                  emailCtrl.text.trim(),
+                  pass1Ctrl.text,
+                  {
+                    'nombres': nameCtrl.text.trim(),
+                    'apellidos': lastNameCtrl.text.trim(),
+                    'telefono': phoneCtrl.text.trim(),
+                    'documento': docCtrl.text.trim(),
+                  },
+                );
+              },
+              child: const Text('Crear'),
+            ),
+          ],
+        );
+      },
+
+
     );
   }
 }
+
 
 class _GoogleButton extends StatelessWidget {
   final VoidCallback? onPressed;

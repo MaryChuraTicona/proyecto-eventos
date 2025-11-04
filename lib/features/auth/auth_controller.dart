@@ -205,28 +205,16 @@ class AuthController {
       AppLogger.info('Intentando login con Google (institucional: $institutionalMode)');
       
       final provider = GoogleAuthProvider();
-      UserCredential credential;
+      
 
       if (kIsWeb) {
-        try {
-          credential = await _auth.signInWithPopup(provider);
-        } on FirebaseAuthException catch (e) {
-          if (e.code == 'popup-blocked' ||
-              e.code == 'popup-closed-by-user' ||
-              e.code == 'unauthorized-domain') {
-            AppLogger.warning('Popup bloqueado, intentando con redirect');
-            await _auth.signInWithRedirect(provider);
-            // En redirect, el AuthWrapper manejará el callback
-            throw 'redirect';
-          }
-          rethrow;
-        }
-      } else {
-        credential = await _auth.signInWithProvider(provider);
+       await _auth.signInWithRedirect(provider);
+        throw 'redirect';
+
       }
 
       final email = credential.user?.email?.toLowerCase() ?? '';
-      
+       final credential = await _auth.signInWithProvider(provider);
       // Validar dominio institucional si es necesario
       if (institutionalMode && !isInstitutionalEmail(email)) {
         await _auth.signOut();
@@ -242,11 +230,38 @@ class AuthController {
       AppLogger.error('Error en login con Google', e);
       throw ErrorHandler.handleAuthError(e);
     } catch (e, st) {
-      if (e == 'redirect') rethrow;
+      
       AppLogger.error('Error inesperado en Google Sign In', e, st);
       rethrow;
     }
   }
+ Future<UserCredential?> handleGoogleRedirect({
+    required bool institutionalMode,
+  }) async {
+    if (!kIsWeb) return null;
+    try {
+      final result = await _auth.getRedirectResult();
+      final user = result.user;
+      if (user == null) return null;
+
+      final email = user.email?.toLowerCase() ?? '';
+      if (institutionalMode && !isInstitutionalEmail(email)) {
+        await _auth.signOut();
+        throw ErrorMessages.institutionalOnly;
+      }
+
+      await ensureUserDocument(user);
+      AppLogger.success('Login con Google (redirect) exitoso: $email');
+      return result;
+    } on FirebaseAuthException catch (e) {
+      AppLogger.error('Error al procesar redirect de Google', e);
+      throw ErrorHandler.handleAuthError(e);
+    } catch (e, st) {
+      AppLogger.error('Error inesperado al procesar redirect de Google', e, st);
+      rethrow;
+    }
+  }
+
 
   /// Envía email de recuperación de contraseña
   Future<void> sendPasswordResetEmail(String email) async {

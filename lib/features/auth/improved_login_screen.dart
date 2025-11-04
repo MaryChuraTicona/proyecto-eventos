@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../core/constants.dart';
 import '../../core/error_handler.dart';
 import 'auth_controller.dart';
@@ -30,12 +31,42 @@ class _ImprovedLoginScreenState extends State<ImprovedLoginScreen> {
   bool _obscurePassword = true;
   bool _isLoading = false;
   bool _institutionalMode = true;
+  
 
+   @override
+  void initState() {
+    super.initState();
+    if (kIsWeb) {
+      Future.microtask(_consumeRedirectResult);
+    }
+  }
   @override
   void dispose() {
     _emailCtrl.dispose();
     _passCtrl.dispose();
     super.dispose();
+  } 
+
+  Future<void> _consumeRedirectResult() async {
+    if (!kIsWeb) return;
+    try {
+      if (mounted) setState(() => _isLoading = true);
+      final result = await _authController.handleGoogleRedirect(
+        institutionalMode: true,
+      );
+      if (result == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+    } on String catch (message) {
+      if (message.isNotEmpty) {
+        _showSnackbar(message);
+      }
+    } catch (e, st) {
+      _showSnackbar(ErrorHandler.logAndHandle(e, st));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   void _showSnackbar(String message) {
@@ -124,17 +155,20 @@ class _ImprovedLoginScreenState extends State<ImprovedLoginScreen> {
 
   Future<void> _handleGoogleSignIn() async {
     setState(() => _isLoading = true);
+    var redirected = false;
     try {
       await _authController.signInWithGoogle(institutionalMode: _institutionalMode);
       // AuthWrapper navega solo
     } on String catch (message) {
-      if (message != 'redirect') {
+     if (message == 'redirect') {
+        redirected = true;
+      } else {
         _showSnackbar(message);
       }
     } catch (e, st) {
       _showSnackbar(ErrorHandler.logAndHandle(e, st));
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+     if (!redirected && mounted) setState(() => _isLoading = false);
     }
   }
 
