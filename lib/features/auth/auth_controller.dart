@@ -5,7 +5,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../core/constants.dart';
 import '../../core/error_handler.dart';
+ 
+ /// Excepción usada para indicar que el flujo continuará después de un redirect.
+class RedirectPendingException implements Exception {
+  const RedirectPendingException();
 
+  @override
+  String toString() => 'RedirectPendingException';
+}
 /// Controlador para manejar toda la lógica de autenticación
 class AuthController {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -124,10 +131,10 @@ class AuthController {
     required Map<String, dynamic> profileData,
   }) async {
     try {
-     final normalizedEmail = email.trim().toLowerCase();
+      final normalizedEmail = email.trim().toLowerCase();
       AppLogger.info('Registrando nuevo usuario: $normalizedEmail');
 
-     if (isInstitutionalEmail(normalizedEmail)) {
+      if (isInstitutionalEmail(normalizedEmail)) {
         throw ErrorMessages.institutionalOnly;
       }
 
@@ -137,7 +144,7 @@ class AuthController {
       final telefono = (profileData['telefono'] ?? '').toString().trim();
       final documento = (profileData['documento'] ?? '').toString().trim();
       
-       if (documento.isNotEmpty) {
+      if (documento.isNotEmpty) {
         final existingByDocument = await _firestore
             .collection(FirestoreCollections.users)
             .where('documento', isEqualTo: documento)
@@ -155,7 +162,6 @@ class AuthController {
         password: password,
       );
       
-      
       final displayName = [nombres, apellidos]
           .where((part) => part.isNotEmpty)
           .join(' ')
@@ -165,7 +171,6 @@ class AuthController {
       if (displayName.isNotEmpty) {
         await credential.user!.updateDisplayName(displayName);
       }
-
 
       // Crear documento en Firestore
       await ensureUserDocument(credential.user!);
@@ -213,8 +218,8 @@ class AuthController {
 
       }
 
+      final credential = await _auth.signInWithProvider(provider);
       final email = credential.user?.email?.toLowerCase() ?? '';
-       final credential = await _auth.signInWithProvider(provider);
       // Validar dominio institucional si es necesario
       if (institutionalMode && !isInstitutionalEmail(email)) {
         await _auth.signOut();
