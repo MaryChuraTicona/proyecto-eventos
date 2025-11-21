@@ -139,7 +139,7 @@ class RegistrationService {
       'id': id,
       'eventId': eventId,
       'uid': uid,
-      if (sessionId != null) 'sessionId': sessionId,
+      'scope': sessionId == null ? 'event' : 'session',
 if (sessionId == null) 'scope': 'event' else 'scope': 'session',
       if (extra != null)
         'answers': {

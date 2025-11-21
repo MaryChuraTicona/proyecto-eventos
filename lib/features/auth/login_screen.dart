@@ -504,7 +504,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 16),
                     Form(
                       key: _formKey,
-                       child: AutofillGroup(
+                      child: AutofillGroup(
                         child: Column(
                           children: [
                             TextFormField(
@@ -618,7 +618,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         ],
                       ),
                     ),
-                  ],
+                    ),
+                ],
 
 
                 ),
